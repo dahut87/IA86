@@ -1,4 +1,5 @@
 #include <final/final.h>
+#include <unistd.h>
 #include <iostream>
 #include <string>
 #include <sstream>
@@ -15,7 +16,9 @@ using FKey = finalcut::FKey;
 using finalcut::FPoint;
 using finalcut::FSize;
 
-
+//----------------------------------------------------------------------
+// Types & classes mineures
+//----------------------------------------------------------------------
  typedef union {
          struct {
                  union {
@@ -135,9 +138,37 @@ class Goal {
         State init;
         State goal;        
 };
+
+//----------------------------------------------------------------------
+// Objectifs de jeux
+//----------------------------------------------------------------------
+
+    // Ordre des registres ... IP DI SI BP SP BX DX CX AX
+Goal goals[]=
+{ 
+    {
+      "L'instruction MOV et les registres","Le but est de bouger du registre AX au registre BX, l' ensemble des données", "Aide....", "inc ax\ndec cx\nmov ax,0x33",
+      {
+         {
+            {},                       
+            {.bx=0x0002,.ax=0x1920}, 
+            0x00000000 
+         },
+         {}
+      },
+      {
+         {
+            {},                       
+            {.bx=25,.dx=0b101,.cx=0x4650, .ax=0xCCDD}, 
+            0x00000000 
+         },
+         {}
+       }
+    }
+};
     
 //----------------------------------------------------------------------
-// class TextFixedWindow
+// Classe TextFixedWindow
 //----------------------------------------------------------------------
 
 class TextFixedWindow final : public finalcut::FDialog
@@ -161,7 +192,6 @@ class TextFixedWindow final : public finalcut::FDialog
     finalcut::FLabel fixedtext{this};
 };
 
-//----------------------------------------------------------------------
 TextFixedWindow::TextFixedWindow (finalcut::FWidget* parent)
   : finalcut::FDialog{parent}
 {
@@ -171,13 +201,11 @@ TextFixedWindow::TextFixedWindow (finalcut::FWidget* parent)
   fixedtext.setFocus();
 }
 
-//----------------------------------------------------------------------
 void TextFixedWindow::refresh()
 {
   
 }
 
-//----------------------------------------------------------------------
 void TextFixedWindow::initLayout()
 {
   fixedtext.setGeometry (FPoint{1, 2}, FSize{getWidth(), getHeight() - 1});
@@ -185,7 +213,6 @@ void TextFixedWindow::initLayout()
   FDialog::initLayout();
 }
 
-//----------------------------------------------------------------------
 void TextFixedWindow::adjustSize()
 {
   finalcut::FDialog::adjustSize();
@@ -193,9 +220,8 @@ void TextFixedWindow::adjustSize()
 }
 
 //----------------------------------------------------------------------
-// class TextEditWindow
+// Classe TextEditWindow
 //----------------------------------------------------------------------
-
 class TextEditWindow final : public finalcut::FDialog
 {
   public:
@@ -209,7 +235,9 @@ class TextEditWindow final : public finalcut::FDialog
     TextEditWindow& operator = (const TextEditWindow&) = delete;
     // Method
     std::string get();
+    void set(std::string str);
   private:
+    std::stringstream out;
     // Method
     void initLayout() override;
     void adjustSize() override;
@@ -217,41 +245,38 @@ class TextEditWindow final : public finalcut::FDialog
     finalcut::FLabel fixedtext{this};
 };
 
-//----------------------------------------------------------------------
 TextEditWindow::TextEditWindow (finalcut::FWidget* parent)
   : finalcut::FDialog{parent}
 {
-
-  fixedtext.setText("pour voir"); 
   fixedtext.ignorePadding();
   fixedtext.setFocus();
 }
 
-//----------------------------------------------------------------------
 std::string TextEditWindow::get()
 {
-  return "inc ax\ndec cx\nmov ax,0x33";
+  out << fixedtext.getText();
+  return out.str();
 }
 
-//----------------------------------------------------------------------
+void TextEditWindow::set(std::string str)
+{
+  fixedtext.setText(str);
+}
+
 void TextEditWindow::initLayout()
 {
-  fixedtext.setGeometry (FPoint{1, 2}, FSize{getWidth(), getHeight() - 1});
-  setMinimumSize (FSize{51, 6});
+  fixedtext.setGeometry (FPoint{2, 3}, FSize(12, 12));
   FDialog::initLayout();
 }
 
-//----------------------------------------------------------------------
 void TextEditWindow::adjustSize()
 {
   finalcut::FDialog::adjustSize();
-  fixedtext.setGeometry (FPoint{1, 2}, FSize(getWidth(), getHeight() - 1));
 }
 
 //----------------------------------------------------------------------
-// class TextWindow
+// Classe TextWindow
 //----------------------------------------------------------------------
-
 class TextWindow final : public finalcut::FDialog
 {
   public:
@@ -274,25 +299,24 @@ class TextWindow final : public finalcut::FDialog
     finalcut::FTextView scrolltext{this};
 };
 
-//----------------------------------------------------------------------
+
 TextWindow::TextWindow (finalcut::FWidget* parent)
   : finalcut::FDialog{parent}
 {
   scrolltext.ignorePadding();
   scrolltext.setFocus();
 }
-//----------------------------------------------------------------------
+
 void TextWindow::onClose(finalcut::FCloseEvent*) 
 {
   return;    
 }
-//----------------------------------------------------------------------
+
 void TextWindow::append(const finalcut::FString& str)
 {
   scrolltext.append(str);
 }
 
-//----------------------------------------------------------------------
 void TextWindow::initLayout()
 {
   scrolltext.setGeometry (FPoint{1, 2}, FSize{getWidth(), getHeight() - 1});
@@ -300,7 +324,6 @@ void TextWindow::initLayout()
   FDialog::initLayout();
 }
 
-//----------------------------------------------------------------------
 void TextWindow::adjustSize()
 {
   finalcut::FDialog::adjustSize();
@@ -308,9 +331,8 @@ void TextWindow::adjustSize()
 }
 
 //----------------------------------------------------------------------
-// class Asm
+// Classe Assembler
 //----------------------------------------------------------------------
-
 class Assembler
 {
   public:
@@ -349,7 +371,7 @@ unsigned char *Assembler::Assemble(uint32_t address)
     err2=ks_asm(ks, reinterpret_cast<const char*>(src_char), address, &code, &codesize, &srcsize);
     if (err2 != KS_ERR_OK)
     {
-        out << "Erreur de compilation de l'assembleur: " << err;
+        out << "Erreur de compilation de l'assembleur";
         log->append(out.str());
     }
     else
@@ -369,11 +391,9 @@ unsigned char *Assembler::Assemble(uint32_t address)
     return reinterpret_cast<unsigned char*>(&code);
 }
  
-
 //----------------------------------------------------------------------
-// class VMEngine
+// Classe VMEngine
 //----------------------------------------------------------------------
-
 class VMEngine
 {
   public:
@@ -397,9 +417,6 @@ VMEngine::VMEngine(TextWindow *log) : log(log)
     else
         log->append("Initialisation de l'ordinateur IA86");
 }
-
-
- //IP DI SI BP SP BX DX CX AX
  
 void VMEngine::Configure(State *init)
 {
@@ -498,9 +515,8 @@ void VMEngine::Run()
    error=uc_emu_start(uc, ADDRESS, ADDRESS + sizecode, 0, 0);*/
 
 //----------------------------------------------------------------------
-// class Menu
+// Classe Menu
 //----------------------------------------------------------------------
-
 class Menu final : public finalcut::FDialog
 {
   public:
@@ -512,14 +528,21 @@ class Menu final : public finalcut::FDialog
     ~Menu() override = default;
     // Disable copy assignment operator (=)
     Menu& operator = (const Menu&) = delete;
-    // Structures
-    // Structures
      // Methods
-    void loadGoal(Goal *g, VMEngine *vm);
+    void setGoal(int num);
+    void loadGoal();
   private:
-    // Methods
+    int  scenario=0;
     void configureFileMenuItems();
-    void defaultCallback (const finalcut::FMenuList*);
+    void initMenusCallBack ();
+    void initMenus();
+    void initMisc();
+    void initNow();
+    void initCore();
+    void compile();
+    void exec();
+    void initWindows();
+    void splash();
     void initLayout() override;
     void adjustSize() override;
     // Event handler
@@ -529,24 +552,90 @@ class Menu final : public finalcut::FDialog
     // Data members
     finalcut::FString        line{13, finalcut::UniChar::BoxDrawingsHorizontal};
     finalcut::FMenuBar       Menubar{this};
-    finalcut::FMenu          File{"&Menu", &Menubar};
+    finalcut::FMenu          File{"&Fichier", &Menubar};
+    finalcut::FMenuItem      New{"&Nouvelle partie", &File};
     finalcut::FMenuItem      Line2{&File};
-    finalcut::FMenuItem      Quit{"&Quit", &File};
-    finalcut::FMenuItem      Window{"&Windows", &Menubar};
+    finalcut::FMenuItem      Quit{"&Quitter", &File};
+    finalcut::FMenu          Compile{"&Compilation", &Menubar};
+    finalcut::FMenuItem      Start{"&Lancer", &Compile};
+    finalcut::FMenu          Debug{"&Deboguage", &Menubar};
+    finalcut::FMenuItem      Exec{"&Executer", &Debug};
+    finalcut::FMenuItem      Step{"Pas &détaillé", &Debug}; 
+    finalcut::FMenuItem      StepOver{"&Pas", &Debug};  
+    finalcut::FDialogListMenu Window{"&Fenêtres", &Menubar};
     finalcut::FLabel         Info{this};
     finalcut::FStatusBar     Statusbar{this};
-
+    TextWindow               log{this};
+    TextWindow               view{this};
+    TextEditWindow           edit{this};
+    VMEngine                 vm{&log};
+    Assembler                asmer{&edit,&log};
 };
 
-//----------------------------------------------------------------------
 Menu::Menu (finalcut::FWidget* parent)
   : finalcut::FDialog{parent}
 {
-  File.setStatusbarMessage ("main menu");
-  Window.setDisable();
-  configureFileMenuItems();
-  defaultCallback (&Menubar);
-  Statusbar.setMessage("Status bar message");
+  initNow();
+}
+
+void Menu::initNow()
+{
+  initWindows();
+  initMisc();
+  initMenus();
+  initMenusCallBack();
+  initCore();
+}
+
+void Menu::initCore()
+{
+  setGoal(0);
+}
+
+void Menu::initWindows()
+{
+  log.setText ("Journaux");
+  log.setGeometry ( FPoint { 62, 45 }, FSize{60, 12} );
+  log.setResizeable();
+  log.append("Lancement des journaux");
+  log.show();
+  edit.setText ("Code source");
+  edit.setGeometry ( FPoint { 01, 20 }, FSize{60, 25} );
+  edit.setResizeable();
+  edit.show();
+  view.setText ("Objectif");
+  view.setGeometry ( FPoint { 01, 45 }, FSize{60, 12} );
+  view.setResizeable();
+  view.show();
+}
+
+void Menu::initMenus()
+{
+  File.setStatusbarMessage ("Menu principal");
+  Line2.setSeparator();
+  Quit.addAccelerator (FKey::Meta_x);
+  Quit.setStatusbarMessage ("Quitter le programme");
+}
+
+void Menu::initMenusCallBack()
+{
+  Quit.addCallback
+  (
+    "clicked",
+    finalcut::getFApplication(),
+    &finalcut::FApplication::cb_exitApp,
+    this
+  );
+  Start.addCallback
+  (
+    "clicked",
+    this,
+    &Menu::compile
+  );
+}
+
+void Menu::initMisc()
+{
   Info << " █████   █████████    ████████    ████████ \n"
        << "░░███   ███░░░░░███  ███░░░░███  ███░░░░███\n"
        << " ░███  ░███    ░███ ░███   ░███ ░███   ░░░ \n"
@@ -558,127 +647,55 @@ Menu::Menu (finalcut::FWidget* parent)
        << "THE EVEN MORE PEDAGOGICAL SYSTEM !!\n"
        << "\n"
        << "Episode 1 : Apprendre l'assembleur X86";
+    Statusbar.setMessage("THE EVEN MORE PEDAGOGICAL SYSTEM !!");
 }
 
-//----------------------------------------------------------------------
-void Menu::configureFileMenuItems()
-{
-  Line2.setSeparator();
-  Quit.addAccelerator (FKey::Meta_x);
-  Quit.setStatusbarMessage ("Quit the program");
-  Quit.addCallback
-  (
-    "clicked",
-    finalcut::getFApplication(),
-    &finalcut::FApplication::cb_exitApp,
-    this
-  );
-}
-
-//----------------------------------------------------------------------
-void Menu::defaultCallback (const finalcut::FMenuList* mb)
-{
-  for (uInt i{1}; i <= mb->getCount(); i++)
-  {
-    auto item = mb->getItem(int(i));
-
-    if ( item
-      && item->isEnabled()
-      && item->acceptFocus()
-      && item->isVisible()
-      && ! item->isSeparator()
-      && item->getText() != "&Quit" )
-    {
-      item->addCallback
-      (
-        "clicked",
-        this, &Menu::cb_message,
-        item
-      );
-      if ( item->hasMenu() )
-        defaultCallback (item->getMenu());
-    }
-  }
-}
-
-//----------------------------------------------------------------------
 void Menu::initLayout()
 {
   Info.setGeometry(FPoint{2, 1}, FSize{43, 12});
   FDialog::initLayout();
 }
 
-//----------------------------------------------------------------------
 void Menu::adjustSize()
 {
   const auto pw = int(getDesktopWidth());
   const auto ph = int(getDesktopHeight());
-  setX (1);
-  setY (1);
+  setX (1 + (pw - int(getWidth())) / 2, false);
+  setY (1 + (ph - int(getHeight())) / 4, false);
   finalcut::FDialog::adjustSize();
 }
 
-//----------------------------------------------------------------------
 void Menu::onClose (finalcut::FCloseEvent* ev)
 {
   finalcut::FApplication::closeConfirmationDialog (this, ev);
 }
 
-//----------------------------------------------------------------------
-void Menu::cb_message (const finalcut::FMenuItem* menuitem)
+void Menu::setGoal(int num)
 {
-  auto text = menuitem->getText();
-  text = text.replace('&', "");
-  finalcut::FMessageBox::info ( this
-                              , "Info"
-                              , "You have chosen \"" + text + "\"" );
+    scenario=num;
+    loadGoal();
 }
 
-void Menu::loadGoal(Goal *g, VMEngine *vm)
+void Menu::loadGoal()
 {
-  const auto& view = new TextWindow(this);
-  view->setText ("Objectif: "+g->title);
-  view->setGeometry ( FPoint { 10, 10 }, FSize{60, 12} );
-  view->setResizeable();
-  view->append(g->description);
-  view->show();
-  const auto& test = new TextFixedWindow(this);
-  test->setText ("test");
-  test->setGeometry ( FPoint { 20, 10 }, FSize{30, 12} );
-  test->show();
-  vm->Configure(&g->init);
+  view.setText("Objectif: "+goals[scenario].title);
+  view.append(goals[scenario].description);
+  edit.set(goals[scenario].code);
+  vm.Configure(&goals[scenario].init);
 }
 
- //IP DI SI BP SP BX DX CX AX
-
-Goal goals[]={ 
+void Menu::compile()
 {
-  "L'instruction MOV et les registres","Le but est de bouger du registre AX au registre BX, l' ensemble des données", "Aide....", "mov ax,immédiat",
-  {
-     {
-        {},                       
-        {.bx=0x0002,.ax=0x1920}, 
-        0x00000000 
-     },
-     {}
-  },
-  {
-     {
-        {},                       
-        {.bx=25,.dx=0b101,.cx=0x4650, .ax=0xCCDD}, 
-        0x00000000 
-     },
-     {}
-   }
+  asmer.Assemble(goals[scenario].init.dump.regs.eip);
 }
-};
 
-
+void Menu::exec()
+{
+}
 
 //----------------------------------------------------------------------
-//                               main part
+// Fonction Main
 //----------------------------------------------------------------------
-
 int main (int argc, char* argv[])
 {
                    
@@ -687,22 +704,9 @@ int main (int argc, char* argv[])
   main_dlg.setText ("IA86");
   main_dlg.setSize ({50, 14});
   main_dlg.setShadow();
-  TextWindow log {&main_dlg};
-  log.setText ("Journaux");
-  log.setGeometry ( FPoint { 30, 10 }, FSize{60, 12} );
-  log.setResizeable();
-  log.append("Lancement des journaux");
-  log.show();
-  TextEditWindow edit {&main_dlg};
-  edit.setText ("Code source");
-  edit.setGeometry ( FPoint { 30, 10 }, FSize{60, 12} );
-  edit.setResizeable();
-  edit.show();
-  finalcut::FWidget::setMainWidget (&main_dlg);
   main_dlg.show();
-  VMEngine vm {&log};
-  Assembler asmer {&edit,&log};
-  asmer.Assemble(0x0000);
-  main_dlg.loadGoal(&goals[0],&vm);
+  finalcut::FWidget::setMainWidget (&main_dlg);
+  //usleep(5 * 1000000);
+  main_dlg.hide();
   return app.exec();
 }
