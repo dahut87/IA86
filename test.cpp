@@ -5,14 +5,135 @@
 #include <keystone/keystone.h>
 #include <unicorn/unicorn.h>
 #include <capstone/capstone.h>
+#include <vector>
 using namespace std;
+using std::cout; using std::endl;
+using std::vector; using std::string;
 
 using FKey = finalcut::FKey;
 using finalcut::FPoint;
 using finalcut::FSize;
-   
-   
 
+
+ typedef union {
+         struct {
+                 union {
+                         uint8_t l;
+                         uint8_t byte;
+                 };
+                 uint8_t h;
+         } __attribute__ (( packed ));
+         uint16_t word;
+ } __attribute__ (( packed )) reg16_t;
+ 
+ typedef union {
+         struct {
+                 union {
+                         uint8_t l;
+                         uint8_t byte;
+                 };
+                 uint8_t h;
+         } __attribute__ (( packed ));
+         uint16_t word;
+         uint32_t dword;
+ } __attribute__ (( packed )) reg32_t;
+ 
+ struct i386_regs {
+         union {
+                 uint16_t ip;
+                 uint32_t eip;
+         };
+         union {
+                 uint16_t di;
+                 uint32_t edi;
+         };
+         union {
+                 uint16_t si;
+                 uint32_t esi;
+         };
+         union {
+                 uint16_t bp;
+                 uint32_t ebp;
+         };
+         union {
+                 uint16_t sp;
+                 uint32_t esp;
+         };
+         union {
+                 struct {
+                         uint8_t bl;
+                         uint8_t bh;
+                 } __attribute__ (( packed ));
+                 uint16_t bx;
+                 uint32_t ebx;
+         };
+         union {
+                 struct {
+                         uint8_t dl;
+                         uint8_t dh;
+                 } __attribute__ (( packed ));
+                 uint16_t dx;
+                 uint32_t edx;
+         };
+         union {
+                 struct {
+                         uint8_t cl;
+                         uint8_t ch;
+                 } __attribute__ (( packed ));
+                 uint16_t cx;
+                 uint32_t ecx;
+         };
+         union {
+                 struct {
+                         uint8_t al;
+                         uint8_t ah;
+                 } __attribute__ (( packed ));
+                 uint16_t ax;
+                 uint32_t eax;
+         };
+ } __attribute__ (( packed ));
+ 
+ struct i386_seg_regs 
+ {
+         uint16_t cs;
+         uint16_t ss;
+         uint16_t ds;
+         uint16_t es;
+         uint16_t fs;
+         uint16_t gs;
+ } __attribute__ (( packed ));
+ 
+ struct i386_all_regs 
+ {
+         struct i386_seg_regs segs;
+         struct i386_regs regs;
+         uint32_t flags;
+ } __attribute__ (( packed ));
+ 
+    
+class Memzone
+{
+    public:
+        uint32_t address;
+        uint32_t size;
+        uint8_t *content;
+};
+
+class State {
+    public:
+        i386_all_regs dump;
+        std::vector<Memzone> memzone;
+};
+    
+class Goal {
+    public:
+        std::string title;
+        std::string description;
+        std::string help;        
+        State init;
+        State goal;        
+};
+    
 //----------------------------------------------------------------------
 // class TextFixedWindow
 //----------------------------------------------------------------------
@@ -89,6 +210,7 @@ class TextWindow final : public finalcut::FDialog
     void append (const finalcut::FString&);
   private:
     // Method
+    void onClose (finalcut::FCloseEvent*) override;
     void initLayout() override;
     void adjustSize() override;
     // Data members
@@ -102,7 +224,11 @@ TextWindow::TextWindow (finalcut::FWidget* parent)
   scrolltext.ignorePadding();
   scrolltext.setFocus();
 }
-
+//----------------------------------------------------------------------
+void TextWindow::onClose (finalcut::FCloseEvent*) 
+{
+  return;    
+}
 //----------------------------------------------------------------------
 void TextWindow::append (const finalcut::FString& str)
 {
@@ -125,6 +251,65 @@ void TextWindow::adjustSize()
 }
 
 //----------------------------------------------------------------------
+// class VMEngine
+//----------------------------------------------------------------------
+
+class VMEngine
+{
+  public:
+    VMEngine(TextWindow *log);
+    void Configure(State *init);
+    void Run();
+  private:
+    uc_engine *uc;
+    uc_err err;
+    TextWindow *log;
+    std::ostringstream out;
+};
+
+VMEngine::VMEngine(TextWindow *log) : log(log)
+{
+    err = uc_open(UC_ARCH_X86, UC_MODE_16, &uc);
+    if (err != UC_ERR_OK) {
+        out << "Impossible d'initialiser la machine virtuelle: " << err;
+        log->append(out.str());
+    }
+    else
+        log->append("Initialisation de l'ordinateur IA86");
+}
+
+void VMEngine::Configure(State *init)
+{
+        log->append("Configuration initiale de l'ordinateur IA86");
+}
+
+void VMEngine::Run()
+{
+
+}
+
+   /*uc_mem_map(uc, ADDRESS, 1 * 1024 * 1024, UC_PROT_ALL);
+   if (uc_mem_write(uc, ADDRESS, encode, sizecode)) {
+     printf("Failed to write emulation code to memory, quit!\n");
+     return -1;
+   }
+   uc_reg_write(uc, UC_X86_REG_CX, &r_cx);
+   uc_reg_write(uc, UC_X86_REG_DX, &r_dx);
+   uc_reg_read(uc, UC_X86_REG_IP, &r_ip);
+   error=uc_emu_start(uc, ADDRESS, ADDRESS + sizecode, 0, 0);
+   if (error) {
+     printf("Failed on uc_emu_start() with error returned %u: %s\n",
+       err, uc_strerror(error));
+   }
+   printf("Emulation done. Below is the CPU context\n"); 
+   uc_reg_read(uc, UC_X86_REG_CX, &r_cx);
+   uc_reg_read(uc, UC_X86_REG_DX, &r_dx);
+   uc_reg_read(uc, UC_X86_REG_IP, &r_ip);
+   printf(">>> CX = 0x%x\n", r_cx);
+   printf(">>> DX = 0x%x\n", r_dx);
+   printf(">>> IP = 0x%x\n", r_ip);*/
+
+//----------------------------------------------------------------------
 // class Menu
 //----------------------------------------------------------------------
 
@@ -140,12 +325,9 @@ class Menu final : public finalcut::FDialog
     // Disable copy assignment operator (=)
     Menu& operator = (const Menu&) = delete;
     // Structures
-    struct Goal {
-        string title;
-        string description;
-    };
+    // Structures
      // Methods
-    void loadGoal(Goal *g);
+    void loadGoal(Goal *g, VMEngine *vm);
   private:
     // Methods
     void configureFileMenuItems();
@@ -264,7 +446,7 @@ void Menu::cb_message (const finalcut::FMenuItem* menuitem)
                               , "You have chosen \"" + text + "\"" );
 }
 
-void Menu::loadGoal(Goal *g)
+void Menu::loadGoal(Goal *g, VMEngine *vm)
 {
   const auto& view = new TextWindow(this);
   view->setText ("Objectif: "+g->title);
@@ -275,70 +457,33 @@ void Menu::loadGoal(Goal *g)
   const auto& test = new TextFixedWindow(this);
   test->setText ("test");
   test->setGeometry ( FPoint { 20, 10 }, FSize{30, 12} );
-  test->show();  
+  test->show();
+  vm->Configure(&g->init);
 }
 
-//----------------------------------------------------------------------
-// class VMEngine
-//----------------------------------------------------------------------
+ //IP DI SI BP SP BX DX CX AX
 
-class VMEngine
+Goal goals[]={ 
 {
-  public:
-    VMEngine(TextWindow *T);
-  private:
-    uc_engine *uc;
-    uc_err err;
-    TextWindow *T;
-    std::ostringstream out;
+  "L'instruction MOV et les registres","Le but est de bouger du registre AX au registre BX, l' ensemble des données", "Aide....", 
+  {
+     {
+        {},                       
+        {}, 
+        0x00000000 
+     },
+     {}
+  },
+  {
+     {
+        {},                       
+        {.bx=25,.dx=0b101,.cx=0x4650, .ax=0xCCDD}, 
+        0x00000000 
+     },
+     {}
+   }
+}
 };
-
-VMEngine::VMEngine(TextWindow *T) : T(T)
-{
-    err = uc_open(UC_ARCH_X86, UC_MODE_16, &uc);
-    if (err != UC_ERR_OK) {
-        out << "Failed on uc_open() with error returned: " << err;
-        T->append(out.str());
-    }
-    out << "Failed on uc_open() with error returned: " << "ok";
-        T->append(out.str());
-
-}
-
-/*VMEngine::Configure(int address)
-{
-
-}
-
-VMEngine::Run()
-{
-
-}
-
-   /*uc_mem_map(uc, ADDRESS, 1 * 1024 * 1024, UC_PROT_ALL);
-   if (uc_mem_write(uc, ADDRESS, encode, sizecode)) {
-     printf("Failed to write emulation code to memory, quit!\n");
-     return -1;
-   }
-   uc_reg_write(uc, UC_X86_REG_CX, &r_cx);
-   uc_reg_write(uc, UC_X86_REG_DX, &r_dx);
-   uc_reg_read(uc, UC_X86_REG_IP, &r_ip);
-   error=uc_emu_start(uc, ADDRESS, ADDRESS + sizecode, 0, 0);
-   if (error) {
-     printf("Failed on uc_emu_start() with error returned %u: %s\n",
-       err, uc_strerror(error));
-   }
-   printf("Emulation done. Below is the CPU context\n"); 
-   uc_reg_read(uc, UC_X86_REG_CX, &r_cx);
-   uc_reg_read(uc, UC_X86_REG_DX, &r_dx);
-   uc_reg_read(uc, UC_X86_REG_IP, &r_ip);
-   printf(">>> CX = 0x%x\n", r_cx);
-   printf(">>> DX = 0x%x\n", r_dx);
-   printf(">>> IP = 0x%x\n", r_ip);*/
-
-
-
-
 
 
 
@@ -348,7 +493,7 @@ VMEngine::Run()
 
 int main (int argc, char* argv[])
 {
-  Menu::Goal goals[]={ {"Numération","Le première objectif vise à savoir convertir des nombres d'une base de numération à une autre."},{"L'instruction MOV",""},{"La mémoire",""}, };
+                   
   finalcut::FApplication app {argc, argv};
   Menu main_dlg {&app};
   main_dlg.setText ("IA86 -  Main window");
@@ -362,7 +507,7 @@ int main (int argc, char* argv[])
   log.show();
   finalcut::FWidget::setMainWidget (&main_dlg);
   main_dlg.show();
-  main_dlg.loadGoal(&goals[0]);
   VMEngine vm {&log};
+  main_dlg.loadGoal(&goals[0],&vm);
   return app.exec();
 }
