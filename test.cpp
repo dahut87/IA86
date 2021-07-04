@@ -2,6 +2,7 @@
 #include <iostream>
 #include <string>
 #include <sstream>
+#include <iomanip>
 #include <keystone/keystone.h>
 #include <unicorn/unicorn.h>
 #include <capstone/capstone.h>
@@ -129,7 +130,8 @@ class Goal {
     public:
         std::string title;
         std::string description;
-        std::string help;        
+        std::string help;
+        std::string code;        
         State init;
         State goal;        
 };
@@ -250,6 +252,7 @@ void TextWindow::adjustSize()
   scrolltext.setGeometry (FPoint{1, 2}, FSize(getWidth(), getHeight() - 1));
 }
 
+
 //----------------------------------------------------------------------
 // class VMEngine
 //----------------------------------------------------------------------
@@ -264,7 +267,7 @@ class VMEngine
     uc_engine *uc;
     uc_err err;
     TextWindow *log;
-    std::ostringstream out;
+    std::stringstream out;
 };
 
 VMEngine::VMEngine(TextWindow *log) : log(log)
@@ -278,9 +281,93 @@ VMEngine::VMEngine(TextWindow *log) : log(log)
         log->append("Initialisation de l'ordinateur IA86");
 }
 
+ //IP DI SI BP SP BX DX CX AX
+ 
 void VMEngine::Configure(State *init)
 {
-        log->append("Configuration initiale de l'ordinateur IA86");
+        out << "Configuration initiale de l'ordinateur IA86:\n  "; 
+        err = uc_reg_write(uc, UC_X86_REG_EIP, &init->dump.regs.eip);
+        if (err != UC_ERR_OK)
+           log->append("Impossible d'initialiser le registre: EIP");
+        else
+        if (init->dump.regs.eip != 0x00000000)
+            if ((init->dump.regs.eip & 0xFFFF0000) == 0x00000000)
+                out << " IP=" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << init->dump.regs.ip << " ";               
+            else
+                out << "EIP=" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << init->dump.regs.eip << " ";     
+        err = uc_reg_write(uc, UC_X86_REG_EDI, &init->dump.regs.edi);
+        if (err != UC_ERR_OK)
+           log->append("Impossible d'initialiser le registre: EDI");
+        else
+        if (init->dump.regs.edi != 0x00000000)
+            if ((init->dump.regs.edi & 0xFFFF0000) == 0x00000000)
+                out << " DI=" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << init->dump.regs.di << " ";               
+            else
+                out << "EDI=" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << init->dump.regs.edi << " ";               
+        err = uc_reg_write(uc, UC_X86_REG_ESI, &init->dump.regs.esi);
+        if (err != UC_ERR_OK)
+           log->append("Impossible d'initialiser le registre: ESE");
+        else
+        if (init->dump.regs.esi != 0x00000000)
+            if ((init->dump.regs.esi & 0xFFFF0000) == 0x00000000)
+                out << " SI=" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << init->dump.regs.si << " ";               
+            else
+                out << "ESI=" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << init->dump.regs.esi << " ";               
+        err = uc_reg_write(uc, UC_X86_REG_EBP, &init->dump.regs.ebp);
+        if (err != UC_ERR_OK)
+           log->append("Impossible d'initialiser le registre: EBP");
+        else
+        if (init->dump.regs.ebp != 0x00000000) 
+            if ((init->dump.regs.ebp & 0xFFFF0000) == 0x00000000)
+                out << " BP=" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << init->dump.regs.bp << " ";               
+            else
+                out << "EBP=" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << init->dump.regs.ebp << " ";               
+        err = uc_reg_write(uc, UC_X86_REG_ESP, &init->dump.regs.esp);
+        if (err != UC_ERR_OK)
+           log->append("Impossible d'initialiser le registre: ESP");
+        else
+        if (init->dump.regs.esp != 0x00000000)
+            if ((init->dump.regs.esp & 0xFFFF0000) == 0x00000000)
+                out << " SP=" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << init->dump.regs.sp << " ";               
+            else
+                out << "ESP=" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << init->dump.regs.esp << " ";               
+        err = uc_reg_write(uc, UC_X86_REG_EBX, &init->dump.regs.ebx);
+        if (err != UC_ERR_OK)
+           log->append("Impossible d'initialiser le registre: EBX");
+        else
+        if (init->dump.regs.ebx != 0x00000000)
+            if ((init->dump.regs.ebx & 0xFFFF0000) == 0x00000000)
+                out << " BX=" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << init->dump.regs.bx << " ";               
+            else
+                out << "EBX=" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << init->dump.regs.ebx << " ";               
+        err = uc_reg_write(uc, UC_X86_REG_EDX, &init->dump.regs.edx);
+        if (err != UC_ERR_OK)
+           log->append("Impossible d'initialiser le registre: EDX");
+        else
+        if (init->dump.regs.edx != 0x00000000)
+            if ((init->dump.regs.edx & 0xFFFF0000) == 0x00000000)
+                out << " DX=" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << init->dump.regs.dx << " ";               
+            else
+                out << "EDX=" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << init->dump.regs.edx << " ";               
+        err = uc_reg_write(uc, UC_X86_REG_ECX, &init->dump.regs.ecx);
+        if (err != UC_ERR_OK)
+           log->append("Impossible d'initialiser le registre: ECX");
+        else
+        if (init->dump.regs.ecx != 0x00000000)
+            if ((init->dump.regs.ecx & 0xFFFF0000) == 0x00000000)
+                out << " CX=" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << init->dump.regs.cx << " ";               
+            else
+                out << "ECX=" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << init->dump.regs.ecx << " ";               
+        err = uc_reg_write(uc, UC_X86_REG_EAX, &init->dump.regs.eax);
+        if (err != UC_ERR_OK)
+           log->append("Impossible d'initialiser le registre: EAX");
+        else
+        if (init->dump.regs.eax != 0x00000000)
+            if ((init->dump.regs.eax & 0xFFFF0000) == 0x00000000)
+                out << " AX=" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << init->dump.regs.ax << " ";               
+            else
+                out << "EAX=" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << init->dump.regs.eax << " ";               
+        log->append(out.str());
 }
 
 void VMEngine::Run()
@@ -290,24 +377,7 @@ void VMEngine::Run()
 
    /*uc_mem_map(uc, ADDRESS, 1 * 1024 * 1024, UC_PROT_ALL);
    if (uc_mem_write(uc, ADDRESS, encode, sizecode)) {
-     printf("Failed to write emulation code to memory, quit!\n");
-     return -1;
-   }
-   uc_reg_write(uc, UC_X86_REG_CX, &r_cx);
-   uc_reg_write(uc, UC_X86_REG_DX, &r_dx);
-   uc_reg_read(uc, UC_X86_REG_IP, &r_ip);
-   error=uc_emu_start(uc, ADDRESS, ADDRESS + sizecode, 0, 0);
-   if (error) {
-     printf("Failed on uc_emu_start() with error returned %u: %s\n",
-       err, uc_strerror(error));
-   }
-   printf("Emulation done. Below is the CPU context\n"); 
-   uc_reg_read(uc, UC_X86_REG_CX, &r_cx);
-   uc_reg_read(uc, UC_X86_REG_DX, &r_dx);
-   uc_reg_read(uc, UC_X86_REG_IP, &r_ip);
-   printf(">>> CX = 0x%x\n", r_cx);
-   printf(">>> DX = 0x%x\n", r_dx);
-   printf(">>> IP = 0x%x\n", r_ip);*/
+   error=uc_emu_start(uc, ADDRESS, ADDRESS + sizecode, 0, 0);*/
 
 //----------------------------------------------------------------------
 // class Menu
@@ -465,11 +535,11 @@ void Menu::loadGoal(Goal *g, VMEngine *vm)
 
 Goal goals[]={ 
 {
-  "L'instruction MOV et les registres","Le but est de bouger du registre AX au registre BX, l' ensemble des données", "Aide....", 
+  "L'instruction MOV et les registres","Le but est de bouger du registre AX au registre BX, l' ensemble des données", "Aide....", "mov ax,immédiat",
   {
      {
         {},                       
-        {}, 
+        {.bx=0x0002,.ax=0x1920}, 
         0x00000000 
      },
      {}
@@ -503,7 +573,7 @@ int main (int argc, char* argv[])
   log.setText ("Journaux");
   log.setGeometry ( FPoint { 30, 10 }, FSize{60, 12} );
   log.setResizeable();
-  log.append("lancement des journaux");
+  log.append("Lancement des journaux");
   log.show();
   finalcut::FWidget::setMainWidget (&main_dlg);
   main_dlg.show();
