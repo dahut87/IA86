@@ -581,6 +581,10 @@ class Menu final : public finalcut::FDialog
     TextWindow               log{this};
     TextWindow               view{this};
     TextFixedWindow          regs{this};
+    TextFixedWindow          flags{this};
+    TextFixedWindow          stack{this};
+    TextFixedWindow          mem{this};
+    TextFixedWindow          tuto{this};
     TextEditWindow           edit{this};
     VMEngine                 vm{&log};
     Assembler                asmer{&edit,&log};
@@ -605,25 +609,38 @@ void Menu::initCore()
 {
   setGoal(0);
 }
-//EAX:0X00000000 | AX:0x0000 | AH:0x00 | AL:0x00
+//EAX:00000000 | AX:0000 | AH:00 | AL:00
 void Menu::initWindows()
 {
   log.setText ("Journaux");
-  log.setGeometry ( FPoint { 62, 45 }, FSize{60, 15} );
+  log.setGeometry ( FPoint { 63, 45 }, FSize{60, 11} );
   log.setResizeable();
   log.append("Lancement des journaux");
   log.show();
   edit.setText ("Code source");
-  edit.setGeometry ( FPoint { 01, 16 }, FSize{40, 29} );
+  edit.setGeometry ( FPoint { 01, 17 }, FSize{39, 27} );
   edit.setResizeable();
   edit.show();
   view.setText ("Objectif");
-  view.setGeometry ( FPoint { 01, 45 }, FSize{60, 12} );
+  view.setGeometry ( FPoint { 01, 45 }, FSize{60, 11} );
   view.setResizeable();
   view.show();
   regs.setText ("Registres");
-  regs.setGeometry ( FPoint { 01, 01 }, FSize{47, 15} );
+  regs.setGeometry ( FPoint { 01, 01 }, FSize{39, 15} );
   regs.show();
+  flags.setText ("Drapeaux");
+  flags.setGeometry ( FPoint { 59, 01 }, FSize{15, 15} );
+  flags.show();
+  stack.setText ("Pile");
+  stack.setGeometry ( FPoint { 42, 01 }, FSize{15, 15} );
+  stack.show();
+  mem.setText ("Mémoire");
+  mem.setGeometry ( FPoint { 76, 01 }, FSize{105, 15} );
+  mem.show();
+  tuto.setText ("Guide");
+  tuto.setGeometry ( FPoint { 125, 45 }, FSize{60, 11} );
+  tuto.setResizeable();
+  tuto.show();
 }
 
 void Menu::initMenus()
