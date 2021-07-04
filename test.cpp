@@ -152,7 +152,7 @@ class TextFixedWindow final : public finalcut::FDialog
     // Disable copy assignment operator (=)
     TextFixedWindow& operator = (const TextFixedWindow&) = delete;
     // Method
-    void refresh ();
+    void refresh();
   private:
     // Method
     void initLayout() override;
@@ -172,7 +172,7 @@ TextFixedWindow::TextFixedWindow (finalcut::FWidget* parent)
 }
 
 //----------------------------------------------------------------------
-void TextFixedWindow::refresh ()
+void TextFixedWindow::refresh()
 {
   
 }
@@ -192,6 +192,61 @@ void TextFixedWindow::adjustSize()
   fixedtext.setGeometry (FPoint{1, 2}, FSize(getWidth(), getHeight() - 1));
 }
 
+//----------------------------------------------------------------------
+// class TextEditWindow
+//----------------------------------------------------------------------
+
+class TextEditWindow final : public finalcut::FDialog
+{
+  public:
+    // Constructor
+    explicit TextEditWindow (finalcut::FWidget* = nullptr);
+    // Disable copy constructor
+    TextEditWindow (const TextEditWindow&) = delete;
+    // Destructor
+    ~TextEditWindow() override = default;
+    // Disable copy assignment operator (=)
+    TextEditWindow& operator = (const TextEditWindow&) = delete;
+    // Method
+    std::string get();
+  private:
+    // Method
+    void initLayout() override;
+    void adjustSize() override;
+    // Data members
+    finalcut::FLabel fixedtext{this};
+};
+
+//----------------------------------------------------------------------
+TextEditWindow::TextEditWindow (finalcut::FWidget* parent)
+  : finalcut::FDialog{parent}
+{
+
+  fixedtext.setText("pour voir"); 
+  fixedtext.ignorePadding();
+  fixedtext.setFocus();
+}
+
+//----------------------------------------------------------------------
+std::string TextEditWindow::get()
+{
+  return "inc ax\ndec cx\nmov ax,0x33";
+}
+
+//----------------------------------------------------------------------
+void TextEditWindow::initLayout()
+{
+  fixedtext.setGeometry (FPoint{1, 2}, FSize{getWidth(), getHeight() - 1});
+  setMinimumSize (FSize{51, 6});
+  FDialog::initLayout();
+}
+
+//----------------------------------------------------------------------
+void TextEditWindow::adjustSize()
+{
+  finalcut::FDialog::adjustSize();
+  fixedtext.setGeometry (FPoint{1, 2}, FSize(getWidth(), getHeight() - 1));
+}
 
 //----------------------------------------------------------------------
 // class TextWindow
@@ -209,10 +264,10 @@ class TextWindow final : public finalcut::FDialog
     // Disable copy assignment operator (=)
     TextWindow& operator = (const TextWindow&) = delete;
     // Method
-    void append (const finalcut::FString&);
+    void append(const finalcut::FString&);
   private:
     // Method
-    void onClose (finalcut::FCloseEvent*) override;
+    void onClose(finalcut::FCloseEvent*) override;
     void initLayout() override;
     void adjustSize() override;
     // Data members
@@ -227,12 +282,12 @@ TextWindow::TextWindow (finalcut::FWidget* parent)
   scrolltext.setFocus();
 }
 //----------------------------------------------------------------------
-void TextWindow::onClose (finalcut::FCloseEvent*) 
+void TextWindow::onClose(finalcut::FCloseEvent*) 
 {
   return;    
 }
 //----------------------------------------------------------------------
-void TextWindow::append (const finalcut::FString& str)
+void TextWindow::append(const finalcut::FString& str)
 {
   scrolltext.append(str);
 }
@@ -252,6 +307,68 @@ void TextWindow::adjustSize()
   scrolltext.setGeometry (FPoint{1, 2}, FSize(getWidth(), getHeight() - 1));
 }
 
+//----------------------------------------------------------------------
+// class Asm
+//----------------------------------------------------------------------
+
+class Assembler
+{
+  public:
+    Assembler(TextEditWindow *edit,TextWindow *log);
+    unsigned char *Assemble(uint32_t address);
+  private:
+    ks_engine *ks;
+    ks_err err;
+    int err2;
+    TextWindow *log;
+    TextEditWindow *edit;
+    std::stringstream out;
+    size_t srcsize;
+    size_t codesize;
+    std::string src;
+    unsigned char *code = new unsigned char[64*1024];
+};
+
+Assembler::Assembler(TextEditWindow *edit,TextWindow *log) : edit(edit),log(log)
+{
+      err = ks_open(KS_ARCH_X86, KS_MODE_16, &ks);
+    if (err != KS_ERR_OK) {
+        out << "Erreur : Initialisation de l'assembleur X86" << err;
+        log->append(out.str());
+    }
+    else
+        log->append("Initialisation de l'assembleur X86");
+}
+
+unsigned char *Assembler::Assemble(uint32_t address)
+{
+    src=edit->get();
+    srcsize=src.size();
+    unsigned char src_char[srcsize+1];
+    strcpy(reinterpret_cast<char*>(src_char), src.c_str());
+    err2=ks_asm(ks, reinterpret_cast<const char*>(src_char), address, &code, &codesize, &srcsize);
+    if (err2 != KS_ERR_OK)
+    {
+        out << "Erreur de compilation de l'assembleur: " << err;
+        log->append(out.str());
+    }
+    else
+    {
+        out << "Compilation réussie, taille du code :" << codesize;
+        log->append(out.str());
+        out.str("");
+        out.clear();
+        if (codesize < 30)
+        {
+               out << "  ";
+               for (size_t count = 0; count < codesize; count++)
+                    out << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << (int)((uint8_t)code[count]) ;
+               log->append(out.str());   
+        }
+    }
+    return reinterpret_cast<unsigned char*>(&code);
+}
+ 
 
 //----------------------------------------------------------------------
 // class VMEngine
@@ -280,6 +397,7 @@ VMEngine::VMEngine(TextWindow *log) : log(log)
     else
         log->append("Initialisation de l'ordinateur IA86");
 }
+
 
  //IP DI SI BP SP BX DX CX AX
  
@@ -566,7 +684,7 @@ int main (int argc, char* argv[])
                    
   finalcut::FApplication app {argc, argv};
   Menu main_dlg {&app};
-  main_dlg.setText ("IA86 -  Main window");
+  main_dlg.setText ("IA86");
   main_dlg.setSize ({50, 14});
   main_dlg.setShadow();
   TextWindow log {&main_dlg};
@@ -575,9 +693,16 @@ int main (int argc, char* argv[])
   log.setResizeable();
   log.append("Lancement des journaux");
   log.show();
+  TextEditWindow edit {&main_dlg};
+  edit.setText ("Code source");
+  edit.setGeometry ( FPoint { 30, 10 }, FSize{60, 12} );
+  edit.setResizeable();
+  edit.show();
   finalcut::FWidget::setMainWidget (&main_dlg);
   main_dlg.show();
   VMEngine vm {&log};
+  Assembler asmer {&edit,&log};
+  asmer.Assemble(0x0000);
   main_dlg.loadGoal(&goals[0],&vm);
   return app.exec();
 }
