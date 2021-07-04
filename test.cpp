@@ -183,8 +183,10 @@ class TextFixedWindow final : public finalcut::FDialog
     // Disable copy assignment operator (=)
     TextFixedWindow& operator = (const TextFixedWindow&) = delete;
     // Method
-    void refresh();
+    std::string get();
+    void set(std::string str);
   private:
+    std::stringstream out;
     // Method
     void initLayout() override;
     void adjustSize() override;
@@ -196,14 +198,19 @@ TextFixedWindow::TextFixedWindow (finalcut::FWidget* parent)
   : finalcut::FDialog{parent}
 {
 
-  fixedtext.setText("pour voir"); 
   fixedtext.ignorePadding();
   fixedtext.setFocus();
 }
 
-void TextFixedWindow::refresh()
+std::string TextFixedWindow::get()
 {
-  
+  out << fixedtext.getText();
+  return out.str();
+}
+
+void TextFixedWindow::set(std::string str)
+{
+  fixedtext.setText(str);
 }
 
 void TextFixedWindow::initLayout()
@@ -552,21 +559,28 @@ class Menu final : public finalcut::FDialog
     // Data members
     finalcut::FString        line{13, finalcut::UniChar::BoxDrawingsHorizontal};
     finalcut::FMenuBar       Menubar{this};
-    finalcut::FMenu          File{"&Fichier", &Menubar};
-    finalcut::FMenuItem      New{"&Nouvelle partie", &File};
-    finalcut::FMenuItem      Line2{&File};
-    finalcut::FMenuItem      Quit{"&Quitter", &File};
-    finalcut::FMenu          Compile{"&Compilation", &Menubar};
-    finalcut::FMenuItem      Start{"&Lancer", &Compile};
-    finalcut::FMenu          Debug{"&Deboguage", &Menubar};
-    finalcut::FMenuItem      Exec{"&Executer", &Debug};
-    finalcut::FMenuItem      Step{"Pas &détaillé", &Debug}; 
-    finalcut::FMenuItem      StepOver{"&Pas", &Debug};  
+    finalcut::FMenu          Game{"&Partie", &Menubar};
+    finalcut::FMenuItem      New{"&Nouvelle partie", &Game};
+    finalcut::FMenuItem      Line2{&Game};
+    finalcut::FMenuItem      Quit{"&Quitter", &Game};
+    finalcut::FMenu          Scenarios{"&Scénarios", &Menubar};
+    finalcut::FMenu          Tools{"&Outils", &Menubar};
+    finalcut::FMenuItem      Assemble{"&Compilation", &Tools};
+    finalcut::FMenuItem      Rearange{"&Ordonne les fenêtres", &Tools};
+    finalcut::FMenu          Debug{"&Déboguage", &Menubar};
+    finalcut::FMenuItem      Run{"&Exécuter", &Debug};
+    finalcut::FMenuItem      End{"&Terminer", &Debug};
+    finalcut::FMenuItem      TraceInto{"Pas à pas &détaillé", &Debug}; 
+    finalcut::FMenuItem      StepOver{"&Pas à pas", &Debug};
+    finalcut::FMenuItem      Breakpoint{"&Point d'arrêt", &Debug};
     finalcut::FDialogListMenu Window{"&Fenêtres", &Menubar};
+    finalcut::FMenu          Help{"&Aide", &Menubar}; 
+    finalcut::FMenuItem      About{"&A propos", &Help}; 
     finalcut::FLabel         Info{this};
     finalcut::FStatusBar     Statusbar{this};
     TextWindow               log{this};
     TextWindow               view{this};
+    TextFixedWindow          regs{this};
     TextEditWindow           edit{this};
     VMEngine                 vm{&log};
     Assembler                asmer{&edit,&log};
@@ -591,30 +605,55 @@ void Menu::initCore()
 {
   setGoal(0);
 }
-
+//EAX:0X00000000 | AX:0x0000 | AH:0x00 | AL:0x00
 void Menu::initWindows()
 {
   log.setText ("Journaux");
-  log.setGeometry ( FPoint { 62, 45 }, FSize{60, 12} );
+  log.setGeometry ( FPoint { 62, 45 }, FSize{60, 15} );
   log.setResizeable();
   log.append("Lancement des journaux");
   log.show();
   edit.setText ("Code source");
-  edit.setGeometry ( FPoint { 01, 20 }, FSize{60, 25} );
+  edit.setGeometry ( FPoint { 01, 16 }, FSize{40, 29} );
   edit.setResizeable();
   edit.show();
   view.setText ("Objectif");
   view.setGeometry ( FPoint { 01, 45 }, FSize{60, 12} );
   view.setResizeable();
   view.show();
+  regs.setText ("Registres");
+  regs.setGeometry ( FPoint { 01, 01 }, FSize{47, 15} );
+  regs.show();
 }
 
 void Menu::initMenus()
 {
-  File.setStatusbarMessage ("Menu principal");
+  Game.setStatusbarMessage ("Menu principal du jeu");
+  Scenarios.setStatusbarMessage ("Scénario disponibles");
+  Tools.setStatusbarMessage ("Outils divers");
+  Debug.setStatusbarMessage ("Fonctionnalitées de déboguages");
+  Window.setStatusbarMessage ("Fenêtres en cours d'exécution");
+  Help.setStatusbarMessage ("Aide et informations IA86");
   Line2.setSeparator();
+  New.addAccelerator (FKey::Meta_n);
+  New.setStatusbarMessage ("Debuter une nouvelle partie"); 
   Quit.addAccelerator (FKey::Meta_x);
-  Quit.setStatusbarMessage ("Quitter le programme");
+  Quit.setStatusbarMessage ("Quitter IA86"); 
+  Run.addAccelerator (FKey::Meta_f9);
+  Run.setStatusbarMessage ("Exécuter le programme - seul un breakpoint arrête"); 
+  TraceInto.addAccelerator (FKey::F7);
+  TraceInto.setStatusbarMessage ("Pas à pas détaillé - entre dans les CALL"); 
+  StepOver.addAccelerator (FKey::F8);
+  StepOver.setStatusbarMessage ("Pas à pas - ne rentre pas dans les CALL"); 
+  Assemble.addAccelerator (FKey::F2);
+  Assemble.setStatusbarMessage ("Assemble le source vers du code machine"); 
+  Rearange.addAccelerator (FKey::F1);
+  Rearange.setStatusbarMessage ("Reorganise les fenêtres dans leur état initial");   
+  Breakpoint.addAccelerator (FKey::F5);
+  Breakpoint.setStatusbarMessage ("Enlève ou met un point d'arrêt"); 
+  End.addAccelerator (FKey::Meta_f2);
+  End.setStatusbarMessage ("Termine le programme et remet à zéro la machine IA86");
+  About.setStatusbarMessage ("A propos de IA86"); 
 }
 
 void Menu::initMenusCallBack()
@@ -626,11 +665,17 @@ void Menu::initMenusCallBack()
     &finalcut::FApplication::cb_exitApp,
     this
   );
-  Start.addCallback
+  Assemble.addCallback
   (
     "clicked",
     this,
     &Menu::compile
+  );
+  Rearange.addCallback
+  (
+    "clicked",
+    this,
+    &Menu::initWindows
   );
 }
 
