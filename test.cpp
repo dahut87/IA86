@@ -463,7 +463,7 @@ std::vector<std::array<std::string, 5>> Desassembler::Desassemble(unsigned char*
         log->append("Erreur de désassemblage");
     else
     {  
-        out << "Désassemblage réussie, taille du source :" << srcsize;
+        out << "Désassemblage réussi, taille du source :" << srcsize;
         log->append(out.str());
 		for (size_t j = 0; j < srcsize; j++)
 		{
@@ -477,8 +477,6 @@ std::vector<std::array<std::string, 5>> Desassembler::Desassemble(unsigned char*
 		    src.push_back(*array);
         }
 		cs_free(insn, srcsize);
-        if (codesize < 100)
-            log->append(out.str());
     }
     return src;
 }
@@ -530,12 +528,15 @@ unsigned char *Assembler::Assemble(std::string source,uint32_t address)
     strcpy(reinterpret_cast<char*>(src_char), src.c_str());
     err2=ks_asm(ks, reinterpret_cast<const char*>(src_char), address, &code, &codesize, &srcsize);
     if (err2 != KS_ERR_OK)
+    {
         log->append("Erreur d'assemblage");
+        codesize=0;
+    }
     else
     {  
         out << "Assemblage réussi, taille du code :" << codesize;
         log->append(out.str());
-        out.str("");
+        /*out.str("");
         out.clear();
         if (codesize < 30)
         {
@@ -543,7 +544,7 @@ unsigned char *Assembler::Assemble(std::string source,uint32_t address)
                for (size_t count = 0; count < codesize; count++)
                     out << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << (int)((uint8_t)code[count]) ;
                log->append(out.str());   
-        }
+        }*/
     }
     return reinterpret_cast<unsigned char*>(code);
 }
@@ -691,6 +692,8 @@ class Menu final : public finalcut::FDialog
     void loadGoal();
   private:
     int  scenario=0;
+    unsigned char *code;
+    bool compiled=false;
     void configureFileMenuItems();
     void initMenusCallBack ();
     void initMenus();
@@ -699,6 +702,9 @@ class Menu final : public finalcut::FDialog
     void initCore();
     void compile();
     void exec();
+    void trace();
+    void step();
+    void verify();
     void initWindows();
     void splash();
     void initLayout() override;
@@ -849,11 +855,29 @@ void Menu::initMenusCallBack()
     this,
     &Menu::compile
   );
+  Run.addCallback
+  (
+    "clicked",
+    this,
+    &Menu::exec
+  );
   Rearange.addCallback
   (
     "clicked",
     this,
     &Menu::initWindows
+  );
+  TraceInto.addCallback
+  (
+    "clicked",
+    this,
+    &Menu::trace
+  );
+  StepOver.addCallback
+  (
+    "clicked",
+    this,
+    &Menu::step
   );
 }
 
@@ -904,18 +928,39 @@ void Menu::loadGoal()
   view.setText("Objectif: "+goals[scenario].title);
   view.append(goals[scenario].description);
   edit.set(goals[scenario].code);
-  vm.Configure(&goals[scenario].init);
 }
 
 void Menu::compile()
 {
-  unsigned char *result;
-  result=asmer.Assemble(edit.get(),goals[scenario].init.dump.regs.eip);
-  debug.set(unasmer.Desassemble(result,asmer.getCodesize(),goals[scenario].init.dump.regs.eip));
+  code=asmer.Assemble(edit.get(),goals[scenario].init.dump.regs.eip);
+  debug.set(unasmer.Desassemble(code,asmer.getCodesize(),goals[scenario].init.dump.regs.eip));
+  compiled=(asmer.getCodesize()>0);
+}
+
+void Menu::verify()
+{
+  if (!compiled)
+  {
+    finalcut::FMessageBox::error(this, "Vous devez compiler le source d'abord !");
+    return;
+  }
 }
 
 void Menu::exec()
 {
+  verify(); 
+  vm.Configure(&goals[scenario].init);
+}
+
+void Menu::trace()
+{
+  verify();
+}
+
+void Menu::step()
+{
+  verify();
+
 }
 
 //----------------------------------------------------------------------
