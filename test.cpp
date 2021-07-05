@@ -474,6 +474,7 @@ std::vector<std::array<std::string, 5>> Desassembler::Desassemble(Code *code)
     {  
         out << "Désassemblage réussi, taille du source :" << srcsize;
         log->append(out.str());
+        src.clear();
 		for (size_t j = 0; j < srcsize; j++)
 		{
 		    std::string *bytes = new std::string("");
@@ -561,6 +562,7 @@ class VMEngine
     VMEngine(TextWindow *log);
     void Configure(State *init,Code *code);
     void Run(uint32_t start, uint32_t stop);
+    std::string getRegs();
   private:
     uc_engine *uc;
     uc_err err;
@@ -577,6 +579,70 @@ VMEngine::VMEngine(TextWindow *log) : log(log)
     }
     else
         log->append("Initialisation de l'ordinateur IA86");
+}
+//EAX:00000000 | AX:0000 | AH:00 | AL:00
+std::string VMEngine::getRegs()
+{
+    int regsi836[] = {
+        UC_X86_REG_EAX, UC_X86_REG_EBX, UC_X86_REG_ECX, UC_X86_REG_EDX, 
+        UC_X86_REG_ESI, UC_X86_REG_EDI, 
+        UC_X86_REG_EBP, UC_X86_REG_ESP, 
+        UC_X86_REG_CS,UC_X86_REG_DS,UC_X86_REG_ES,UC_X86_REG_SS,UC_X86_REG_FS,UC_X86_REG_GS,
+        UC_X86_REG_EIP,UC_X86_REG_EFLAGS
+    };
+    void *ptrs[sizeof(regsi836)];
+    uint32_t vals[sizeof(regsi836)];
+    for (size_t i = 0; i < sizeof(regsi836); i++) {
+        ptrs[i] = &vals[i];
+    }
+    err = uc_reg_read_batch(uc, regsi836, ptrs, sizeof(regsi836));
+    if (err > 0) {
+        log->append("Erreur lors de la récupération des registres depuis la VM");
+        return "";
+    }
+    std::stringstream out;
+    out << "EAX:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[0] << " | ";
+    out << "AX:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[0] & 0x0000FFFF) << " | "; 
+    out << "AH:" << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << ((vals[0] & 0xFF00) >> 8) << " | "; 
+    out << "AL:" << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << (vals[0] & 0xFF) << "\n"; 
+
+    out << "EBX:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[1] << " | ";
+    out << "BX:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[1] & 0x0000FFFF) << " | "; 
+    out << "BH:" << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << ((vals[1] & 0xFF00) >> 8) << " | "; 
+    out << "BL:" << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << (vals[1] & 0xFF) << "\n"; 
+    
+    out << "ECX:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[2] << " | ";
+    out << "CX:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[2] & 0x0000FFFF) << " | "; 
+    out << "CH:" << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << ((vals[2] & 0xFF00) >> 8) << " | "; 
+    out << "CL:" << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << (vals[2] & 0xFF) << "\n"; 
+    
+    out << "EDX:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[3] << " | ";
+    out << "DX:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[3] & 0x0000FFFF) << " | "; 
+    out << "DH:" << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << ((vals[3] & 0xFF00) >> 8) << " | "; 
+    out << "DL:" << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << (vals[3] & 0xFF) << "\n"; 
+    
+    out << "ESI:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[4] << " | ";
+    out << "SI:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[4] & 0x0000FFFF) << "\n"; 
+    out << "EDI:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[5] << " | ";
+    out << "DI:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[5] & 0x0000FFFF) << "\n";
+    
+    out << "EBP:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[6] << " | ";
+    out << "BP:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[6] & 0x0000FFFF) << "\n"; 
+    out << "ESP:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[7] << " | ";
+    out << "SP:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[7] & 0x0000FFFF) << "\n";
+    
+    out << "CS:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[8] & 0x0000FFFF) << " | "; 
+    out << "DS:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[9] & 0x0000FFFF) << " | "; 
+    out << "ES:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[10] & 0x0000FFFF) << "\n"; 
+    out << "SS:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[11] & 0x0000FFFF) << " | "; 
+    out << "FS:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[12] & 0x0000FFFF) << " | "; 
+    out << "GS:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[13] & 0x0000FFFF) << "\n"; 
+    
+    out << "EIP:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[14] << " | ";
+    out << "IP:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[14] & 0x0000FFFF) << "\n";
+    
+    out << "EFLAGS:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[15] << ""; 
+    return out.str();
 }
  
 void VMEngine::Configure(State *init, Code *code)
@@ -666,7 +732,7 @@ void VMEngine::Configure(State *init, Code *code)
                 out << "EAX=" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << init->dump.regs.eax << " ";               
         log->append(out.str());
         uc_mem_map(uc, init->dump.regs.eip,code->size, UC_PROT_ALL);
-        if (uc_mem_write(uc, init->dump.regs.eip, code->content, code->size)) 
+        if (uc_mem_write(uc, init->dump.regs.eip, &code->content, code->size-1)) 
         {
             log->append("Erreur de copie mémoire dans la machine virtuelle");
             return;
@@ -676,6 +742,7 @@ void VMEngine::Configure(State *init, Code *code)
 void VMEngine::Run(uint32_t start, uint32_t stop)
 {
     err=uc_emu_start(uc, start, stop, 0, 0);
+    getRegs();
 }
 
 //----------------------------------------------------------------------
@@ -773,7 +840,7 @@ void Menu::initCore()
 {
   setGoal(0);
 }
-//EAX:00000000 | AX:0000 | AH:00 | AL:00
+
 void Menu::initWindows()
 {
   log.setText ("Journaux");
@@ -953,6 +1020,7 @@ void Menu::exec()
     return;
   }  
   vm.Configure(&goals[scenario].init,code);
+  regs.set(vm.getRegs());
 }
 
 void Menu::trace()
