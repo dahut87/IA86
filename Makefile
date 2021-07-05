@@ -18,5 +18,8 @@ run:
 
 rerun: delete files run	
 
+stop:
+	docker stop maker
+
 delete:
 	rm -rf ./test

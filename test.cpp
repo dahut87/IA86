@@ -244,7 +244,6 @@ class TextEditWindow final : public finalcut::FDialog
     std::string get();
     void set(std::string str);
   private:
-    std::stringstream out;
     // Method
     void initLayout() override;
     void adjustSize() override;
@@ -261,6 +260,7 @@ TextEditWindow::TextEditWindow (finalcut::FWidget* parent)
 
 std::string TextEditWindow::get()
 {
+  std::stringstream out;
   out << fixedtext.getText();
   return out.str();
 }
@@ -322,6 +322,7 @@ void TextWindow::onClose(finalcut::FCloseEvent*)
 void TextWindow::append(const finalcut::FString& str)
 {
   scrolltext.append(str);
+  scrolltext.scrollBy (0, 1);
 }
 
 void TextWindow::initLayout()
@@ -338,29 +339,83 @@ void TextWindow::adjustSize()
 }
 
 //----------------------------------------------------------------------
+// Classe Desassembler
+//----------------------------------------------------------------------
+class Desassembler
+{
+  public:
+    Desassembler(TextWindow *log);
+    std::string Desassemble(unsigned char* code,size_t codesize,uint32_t address);
+  private:
+    csh handle;
+    cs_insn *insn;
+    int err;
+    TextWindow *log;
+    TextEditWindow *edit;
+    size_t srcsize;
+    size_t codesize;
+    std::string src;
+    unsigned char *src_char = new unsigned char[64*1024];
+};
+
+Desassembler::Desassembler(TextWindow *log) : log(log)
+{
+    std::stringstream out;
+    err = cs_open(CS_ARCH_X86, CS_MODE_16, &handle);
+    if (err != CS_ERR_OK) {
+        out << "Erreur : Initialisation du désassembleur X86" << err;
+        log->append(out.str());
+    }
+    else
+        log->append("Initialisation du désassembleur X86");
+}
+
+std::string Desassembler::Desassemble(unsigned char* code,size_t codesize,uint32_t address)
+{
+    std::stringstream out;
+    srcsize=cs_disasm(handle, code, codesize, address, 0, &insn);
+    if (srcsize == 0)
+        log->append("Erreur de désassemblage");
+    else
+    {  
+        out << "Désassemblage réussie, taille du source :" << srcsize;
+        log->append(out.str());
+        out.str("");
+        out.clear();
+		for (size_t j = 0; j < srcsize; j++)
+		    out << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << insn[j].address << ":" << insn[j].mnemonic << " " << insn[j].op_str << "\n";
+		cs_free(insn, srcsize);
+        if (codesize < 100)
+            log->append(out.str());
+    }
+    return out.str();
+}
+
+//----------------------------------------------------------------------
 // Classe Assembler
 //----------------------------------------------------------------------
 class Assembler
 {
   public:
-    Assembler(TextEditWindow *edit,TextWindow *log);
-    unsigned char *Assemble(uint32_t address);
+    Assembler(TextWindow *log);
+    unsigned char *Assemble(std::string source,uint32_t address);
+    size_t getCodesize();
   private:
     ks_engine *ks;
     ks_err err;
     int err2;
     TextWindow *log;
     TextEditWindow *edit;
-    std::stringstream out;
     size_t srcsize;
     size_t codesize;
     std::string src;
     unsigned char *code = new unsigned char[64*1024];
 };
 
-Assembler::Assembler(TextEditWindow *edit,TextWindow *log) : edit(edit),log(log)
+Assembler::Assembler(TextWindow *log) : log(log)
 {
-      err = ks_open(KS_ARCH_X86, KS_MODE_16, &ks);
+    std::stringstream out;
+    err = ks_open(KS_ARCH_X86, KS_MODE_16, &ks);
     if (err != KS_ERR_OK) {
         out << "Erreur : Initialisation de l'assembleur X86" << err;
         log->append(out.str());
@@ -369,21 +424,24 @@ Assembler::Assembler(TextEditWindow *edit,TextWindow *log) : edit(edit),log(log)
         log->append("Initialisation de l'assembleur X86");
 }
 
-unsigned char *Assembler::Assemble(uint32_t address)
+size_t Assembler::getCodesize()
 {
-    src=edit->get();
+    return codesize;
+}
+
+unsigned char *Assembler::Assemble(std::string source,uint32_t address)
+{
+    std::stringstream out;
+    src=source;
     srcsize=src.size();
     unsigned char src_char[srcsize+1];
     strcpy(reinterpret_cast<char*>(src_char), src.c_str());
     err2=ks_asm(ks, reinterpret_cast<const char*>(src_char), address, &code, &codesize, &srcsize);
     if (err2 != KS_ERR_OK)
-    {
-        out << "Erreur de compilation de l'assembleur";
-        log->append(out.str());
-    }
+        log->append("Erreur d'assemblage");
     else
-    {
-        out << "Compilation réussie, taille du code :" << codesize;
+    {  
+        out << "Assemblage réussi, taille du code :" << codesize;
         log->append(out.str());
         out.str("");
         out.clear();
@@ -395,7 +453,7 @@ unsigned char *Assembler::Assemble(uint32_t address)
                log->append(out.str());   
         }
     }
-    return reinterpret_cast<unsigned char*>(&code);
+    return reinterpret_cast<unsigned char*>(code);
 }
  
 //----------------------------------------------------------------------
@@ -411,11 +469,11 @@ class VMEngine
     uc_engine *uc;
     uc_err err;
     TextWindow *log;
-    std::stringstream out;
 };
 
 VMEngine::VMEngine(TextWindow *log) : log(log)
 {
+    std::stringstream out; 
     err = uc_open(UC_ARCH_X86, UC_MODE_16, &uc);
     if (err != UC_ERR_OK) {
         out << "Impossible d'initialiser la machine virtuelle: " << err;
@@ -427,6 +485,7 @@ VMEngine::VMEngine(TextWindow *log) : log(log)
  
 void VMEngine::Configure(State *init)
 {
+        std::stringstream out;
         out << "Configuration initiale de l'ordinateur IA86:\n  "; 
         err = uc_reg_write(uc, UC_X86_REG_EIP, &init->dump.regs.eip);
         if (err != UC_ERR_OK)
@@ -585,9 +644,11 @@ class Menu final : public finalcut::FDialog
     TextFixedWindow          stack{this};
     TextFixedWindow          mem{this};
     TextFixedWindow          tuto{this};
+    TextFixedWindow          screen{this};
     TextEditWindow           edit{this};
     VMEngine                 vm{&log};
-    Assembler                asmer{&edit,&log};
+    Assembler                asmer{&log};
+    Desassembler             unasmer{&log};
 };
 
 Menu::Menu (finalcut::FWidget* parent)
@@ -635,12 +696,15 @@ void Menu::initWindows()
   stack.setGeometry ( FPoint { 42, 01 }, FSize{15, 15} );
   stack.show();
   mem.setText ("Mémoire");
-  mem.setGeometry ( FPoint { 76, 01 }, FSize{105, 15} );
+  mem.setGeometry ( FPoint { 76, 01 }, FSize{109, 15} );
   mem.show();
   tuto.setText ("Guide");
   tuto.setGeometry ( FPoint { 125, 45 }, FSize{60, 11} );
   tuto.setResizeable();
   tuto.show();
+  screen.setText ("Ecran");
+  screen.setGeometry ( FPoint { 105, 18 }, FSize{80, 25} );
+  screen.show();
 }
 
 void Menu::initMenus()
@@ -748,7 +812,9 @@ void Menu::loadGoal()
 
 void Menu::compile()
 {
-  asmer.Assemble(goals[scenario].init.dump.regs.eip);
+  unsigned char *result;
+  result=asmer.Assemble(edit.get(),goals[scenario].init.dump.regs.eip);
+  unasmer.Desassemble(result,asmer.getCodesize(),goals[scenario].init.dump.regs.eip);
 }
 
 void Menu::exec()
