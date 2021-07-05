@@ -134,7 +134,8 @@ class Goal {
         std::string title;
         std::string description;
         std::string help;
-        std::string code;        
+        std::string code;  
+        int level;      
         State init;
         State goal;        
 };
@@ -146,6 +147,8 @@ class Code
         size_t size;
         unsigned char *content;
         bool assembled;
+        bool executed;
+        bool loaded;
 };
 
 //----------------------------------------------------------------------
@@ -155,8 +158,7 @@ class Code
 std::string intToHexString(int intValue, int size) {
     string hexStr;
     std::stringstream sstream;
-    sstream << std::setfill ('0') << std::setw(size)
-    << std::hex << (int)intValue;
+    sstream << std::setfill ('0') << std::setw(size) << std::hex << (int)intValue;
     hexStr= sstream.str();
     sstream.clear();
     return hexStr;
@@ -170,7 +172,7 @@ std::string intToHexString(int intValue, int size) {
 Goal goals[]=
 { 
     {
-      "L'instruction MOV et les registres","Le but est de bouger du registre AX au registre BX, l' ensemble des données", "Aide....", "inc ax\ndec cx\nmov ax,0x33\nadd ax,[bx+2]",
+      "L'instruction MOV et les registres","Le but est de bouger du registre AX au registre BX, l' ensemble des données", "Aide....", "inc ax\ndec cx\nmov ax,0x33\nadd dx,[bx+2]\nmov cx,12", 8,
       {
          {
             {},                       
@@ -309,15 +311,14 @@ void TextFixedWindow::set(std::string str)
 
 void TextFixedWindow::initLayout()
 {
-  fixedtext.setGeometry (FPoint{1, 2}, FSize{getWidth(), getHeight() - 1});
-  setMinimumSize (FSize{51, 6});
+  fixedtext.setGeometry (FPoint{2, 3}, FSize{getWidth()-2, getHeight() - 2});
   FDialog::initLayout();
 }
 
 void TextFixedWindow::adjustSize()
 {
   finalcut::FDialog::adjustSize();
-  fixedtext.setGeometry (FPoint{1, 2}, FSize(getWidth(), getHeight() - 1));
+  fixedtext.setGeometry (FPoint{2, 3}, FSize(getWidth()-2, getHeight() - 2));
 }
 
 //----------------------------------------------------------------------
@@ -366,13 +367,14 @@ void TextEditWindow::set(std::string str)
 
 void TextEditWindow::initLayout()
 {
-  fixedtext.setGeometry (FPoint{2, 3}, FSize(12, 12));
+  fixedtext.setGeometry (FPoint{2, 3}, FSize{getWidth()-2, getHeight() - 2});
   FDialog::initLayout();
 }
 
 void TextEditWindow::adjustSize()
 {
   finalcut::FDialog::adjustSize();
+  fixedtext.setGeometry (FPoint{2, 3}, FSize{getWidth()-2, getHeight() - 2});
 }
 
 //----------------------------------------------------------------------
@@ -422,7 +424,6 @@ void TextWindow::append(const finalcut::FString& str)
 void TextWindow::initLayout()
 {
   scrolltext.setGeometry (FPoint{1, 2}, FSize{getWidth(), getHeight() - 1});
-  setMinimumSize (FSize{51, 6});
   FDialog::initLayout();
 }
 
@@ -561,8 +562,8 @@ class VMEngine
   public:
     VMEngine(TextWindow *log);
     void Configure(State *init,Code *code);
-    void Run(uint32_t start, uint32_t stop);
-    std::string getRegs();
+    void Run(Code *code, uint32_t start, uint32_t stop, uint64_t timeout);
+    std::string getRegs(int level);
   private:
     uc_engine *uc;
     uc_err err;
@@ -580,8 +581,20 @@ VMEngine::VMEngine(TextWindow *log) : log(log)
     else
         log->append("Initialisation de l'ordinateur IA86");
 }
-//EAX:00000000 | AX:0000 | AH:00 | AL:00
-std::string VMEngine::getRegs()
+// Level  1 : IP AL
+// Level  2 : IP AX
+// Level  3 : IP AX BX CX DX
+// Level  4 : IP AX BX CX DX FLAGS
+// Level  5 : IP AX BX CX DX FLAGS SI DI
+// Level  6 : IP AX BX CX DX FLAGS SI DI SP BP
+// Level  7 : IP AX BX CX DX FLAGS SI DI SP BP CS DS ES SS
+// Level  8 : IP AX BX CX DX FLAGS SI DI SP BP CS DS ES SS FS GS
+// Level  9 : EIP EAX EBX ECX EDX EFLAGS ESI EDI ESP EBP CS DS ES SS FS GS
+// Level 10 : EIP EAX EBX ECX EDX EFLAGS ESI EDI ESP EBP CS DS ES SS FS GS ST0 ST1 ST2 ST3 ST4 ST5 ST6 ST7
+// Level 11 : EIP EAX EBX ECX EDX EFLAGS ESI EDI ESP EBP CS DS ES SS FS GS ST0 ST1 ST2 ST3 ST4 ST5 ST6 ST7 CR0 CR2 CR3 CR4 CR8 
+// Level 12 : EIP EAX EBX ECX EDX EFLAGS ESI EDI ESP EBP CS DS ES SS FS GS ST0 ST1 ST2 ST3 ST4 ST5 ST6 ST7 CR0 CR2 CR3 CR4 CR8 DB0 DB1 DB2 DB3 DB6 DB7
+
+std::string VMEngine::getRegs(int level)
 {
     int regsi836[] = {
         UC_X86_REG_EAX, UC_X86_REG_EBX, UC_X86_REG_ECX, UC_X86_REG_EDX, 
@@ -601,47 +614,81 @@ std::string VMEngine::getRegs()
         return "";
     }
     std::stringstream out;
-    out << "EAX:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[0] << " | ";
-    out << "AX:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[0] & 0x0000FFFF) << " | "; 
-    out << "AH:" << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << ((vals[0] & 0xFF00) >> 8) << " | "; 
+    if (level > 8)
+        out << "EAX:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[0] << " | ";
+    if (level > 1)
+        out << "AX:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[0] & 0x0000FFFF) << " | "; 
+    if (level > 1)
+        out << "AH:" << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << ((vals[0] & 0xFF00) >> 8) << " | "; 
     out << "AL:" << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << (vals[0] & 0xFF) << "\n"; 
 
-    out << "EBX:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[1] << " | ";
-    out << "BX:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[1] & 0x0000FFFF) << " | "; 
-    out << "BH:" << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << ((vals[1] & 0xFF00) >> 8) << " | "; 
-    out << "BL:" << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << (vals[1] & 0xFF) << "\n"; 
+    if (level > 8)
+        out << "EBX:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[1] << " | ";
+    if (level > 2)
+        out << "BX:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[1] & 0x0000FFFF) << " | "; 
+    if (level > 2)
+        out << "BH:" << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << ((vals[1] & 0xFF00) >> 8) << " | "; 
+    if (level > 2)
+        out << "BL:" << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << (vals[1] & 0xFF) << "\n"; 
     
-    out << "ECX:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[2] << " | ";
-    out << "CX:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[2] & 0x0000FFFF) << " | "; 
-    out << "CH:" << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << ((vals[2] & 0xFF00) >> 8) << " | "; 
-    out << "CL:" << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << (vals[2] & 0xFF) << "\n"; 
+    if (level > 8)
+        out << "ECX:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[2] << " | ";
+    if (level > 2)
+        out << "CX:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[2] & 0x0000FFFF) << " | "; 
+    if (level > 2)
+        out << "CH:" << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << ((vals[2] & 0xFF00) >> 8) << " | "; 
+    if (level > 2)
+        out << "CL:" << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << (vals[2] & 0xFF) << "\n"; 
     
-    out << "EDX:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[3] << " | ";
-    out << "DX:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[3] & 0x0000FFFF) << " | "; 
-    out << "DH:" << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << ((vals[3] & 0xFF00) >> 8) << " | "; 
-    out << "DL:" << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << (vals[3] & 0xFF) << "\n"; 
+    if (level > 8)
+        out << "EDX:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[3] << " | ";
+    if (level > 2)
+        out << "DX:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[3] & 0x0000FFFF) << " | "; 
+    if (level > 2)
+        out << "DH:" << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << ((vals[3] & 0xFF00) >> 8) << " | "; 
+    if (level > 2)
+        out << "DL:" << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << (vals[3] & 0xFF) << "\n"; 
     
-    out << "ESI:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[4] << " | ";
-    out << "SI:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[4] & 0x0000FFFF) << "\n"; 
-    out << "EDI:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[5] << " | ";
-    out << "DI:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[5] & 0x0000FFFF) << "\n";
+    if (level > 8)
+        out << "ESI:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[4] << " | ";
+    if (level > 4)    
+        out << "SI:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[4] & 0x0000FFFF) << "\n"; 
+    if (level > 8)
+        out << "EDI:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[5] << " | ";
+    if (level > 4)
+        out << "DI:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[5] & 0x0000FFFF) << "\n";
     
-    out << "EBP:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[6] << " | ";
-    out << "BP:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[6] & 0x0000FFFF) << "\n"; 
-    out << "ESP:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[7] << " | ";
-    out << "SP:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[7] & 0x0000FFFF) << "\n";
+    if (level > 8)
+        out << "EBP:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[6] << " | ";
+    if (level > 5)
+        out << "BP:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[6] & 0x0000FFFF) << "\n"; 
+    if (level > 8)
+        out << "ESP:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[7] << " | ";
+    if (level > 5)
+        out << "SP:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[7] & 0x0000FFFF) << "\n";
     
-    out << "CS:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[8] & 0x0000FFFF) << " | "; 
-    out << "DS:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[9] & 0x0000FFFF) << " | "; 
-    out << "ES:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[10] & 0x0000FFFF) << "\n"; 
-    out << "SS:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[11] & 0x0000FFFF) << " | "; 
-    out << "FS:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[12] & 0x0000FFFF) << " | "; 
-    out << "GS:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[13] & 0x0000FFFF) << "\n"; 
+    if (level > 6)
+        out << "CS:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[8] & 0x0000FFFF) << " | "; 
+    if (level > 6)
+        out << "DS:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[9] & 0x0000FFFF) << " | "; 
+    if (level > 6)
+        out << "ES:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[10] & 0x0000FFFF) << "\n"; 
+    if (level > 6)
+        out << "SS:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[11] & 0x0000FFFF) << " | "; 
+    if (level > 7)
+        out << "FS:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[12] & 0x0000FFFF) << " | ";
+    if (level > 7) 
+        out << "GS:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[13] & 0x0000FFFF) << "\n"; 
     
-    out << "EIP:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[14] << " | ";
+    if (level > 8)
+        out << "EIP:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[14] << " | ";
     out << "IP:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[14] & 0x0000FFFF) << "\n";
     
-    out << "EFLAGS:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[15] << ""; 
+    if (level > 3)
+    if (level < 9)
+        out << "FLAGS:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << (vals[15]  & 0xFFFF)<< ""; 
+    else
+        out << "EFLAGS:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[15] << ""; 
     return out.str();
 }
  
@@ -731,18 +778,31 @@ void VMEngine::Configure(State *init, Code *code)
             else
                 out << "EAX=" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << init->dump.regs.eax << " ";               
         log->append(out.str());
-        uc_mem_map(uc, init->dump.regs.eip,code->size, UC_PROT_ALL);
-        if (uc_mem_write(uc, init->dump.regs.eip, &code->content, code->size-1)) 
+        uc_mem_map(uc, init->dump.regs.eip, 1 * 1024 * 1024, UC_PROT_ALL);
+        err = uc_mem_write(uc, init->dump.regs.eip, code->content, code->size);
+        if (err) 
         {
+            code->loaded=false;
             log->append("Erreur de copie mémoire dans la machine virtuelle");
             return;
         }
+        else
+            code->loaded=true;
 }
 
-void VMEngine::Run(uint32_t start, uint32_t stop)
+void VMEngine::Run(Code *code,uint32_t start, uint32_t stop, uint64_t timeout)
 {
-    err=uc_emu_start(uc, start, stop, 0, 0);
-    getRegs();
+    err=uc_emu_start(uc, start, stop, timeout, 0);
+    if (err) 
+    {
+        log->append("Erreur lors de l'exécution de la machine virtuelle");
+        code->executed=false;
+        return;
+    }
+    else
+    {
+        code->executed="true";
+    }
 }
 
 //----------------------------------------------------------------------
@@ -791,7 +851,7 @@ class Menu final : public finalcut::FDialog
     finalcut::FMenuItem      New{"&Nouvelle partie", &Game};
     finalcut::FMenuItem      Line2{&Game};
     finalcut::FMenuItem      Quit{"&Quitter", &Game};
-    finalcut::FMenu          Scenarios{"&Scénarios", &Menubar};
+    finalcut::FMenu          Options{"&Options", &Menubar};
     finalcut::FMenu          Tools{"&Outils", &Menubar};
     finalcut::FMenuItem      Assemble{"&Compilation", &Tools};
     finalcut::FMenuItem      Rearange{"&Ordonne les fenêtres", &Tools};
@@ -857,16 +917,16 @@ void Menu::initWindows()
   view.setResizeable();
   view.show();
   regs.setText ("Registres");
-  regs.setGeometry ( FPoint { 01, 01 }, FSize{39, 15} );
+  regs.setGeometry ( FPoint { 01, 01 }, FSize{40, 15} );
   regs.show();
   flags.setText ("Drapeaux");
-  flags.setGeometry ( FPoint { 59, 01 }, FSize{15, 15} );
+  flags.setGeometry ( FPoint { 60, 01 }, FSize{15, 15} );
   flags.show();
   stack.setText ("Pile");
-  stack.setGeometry ( FPoint { 42, 01 }, FSize{15, 15} );
+  stack.setGeometry ( FPoint { 43, 01 }, FSize{15, 15} );
   stack.show();
   mem.setText ("Mémoire");
-  mem.setGeometry ( FPoint { 76, 01 }, FSize{109, 15} );
+  mem.setGeometry ( FPoint { 77, 01 }, FSize{108, 15} );
   mem.show();
   tuto.setText ("Guide");
   tuto.setGeometry ( FPoint { 125, 45 }, FSize{60, 11} );
@@ -884,7 +944,7 @@ void Menu::initWindows()
 void Menu::initMenus()
 {
   Game.setStatusbarMessage ("Menu principal du jeu");
-  Scenarios.setStatusbarMessage ("Scénario disponibles");
+  Options.setStatusbarMessage ("Options du logiciel IA86");
   Tools.setStatusbarMessage ("Outils divers");
   Debug.setStatusbarMessage ("Fonctionnalitées de déboguages");
   Window.setStatusbarMessage ("Fenêtres en cours d'exécution");
@@ -1018,9 +1078,11 @@ void Menu::exec()
   {
     finalcut::FMessageBox::error(this, "Vous devez compiler le source d'abord !");
     return;
-  }  
-  vm.Configure(&goals[scenario].init,code);
-  regs.set(vm.getRegs());
+  }
+  if (!code->executed)
+    vm.Configure(&goals[scenario].init,code);
+  vm.Run(code,code->address,code->address+code->size,0);
+  regs.set(vm.getRegs(goals[scenario].level));
 }
 
 void Menu::trace()
@@ -1029,7 +1091,10 @@ void Menu::trace()
   {
     finalcut::FMessageBox::error(this, "Vous devez compiler le source d'abord !");
     return;
-  }}
+  }
+  if (!code->executed)
+    vm.Configure(&goals[scenario].init,code);  
+}
 
 void Menu::step()
 {
@@ -1037,7 +1102,10 @@ void Menu::step()
   {
     finalcut::FMessageBox::error(this, "Vous devez compiler le source d'abord !");
     return;
-  }}
+  }
+  if (!code->executed)
+    vm.Configure(&goals[scenario].init,code);  
+}
 
 //----------------------------------------------------------------------
 // Fonction Main
