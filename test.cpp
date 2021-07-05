@@ -139,6 +139,15 @@ class Goal {
         State goal;        
 };
 
+class Code
+{
+    public:
+        uint32_t address;
+        size_t size;
+        unsigned char *content;
+        bool assembled;
+};
+
 //----------------------------------------------------------------------
 // Fonctions diverses
 //----------------------------------------------------------------------
@@ -430,7 +439,7 @@ class Desassembler
 {
   public:
     Desassembler(TextWindow *log);
-    std::vector<std::array<std::string, 5>> Desassemble(unsigned char* code,size_t codesize,uint32_t address);
+    std::vector<std::array<std::string, 5>> Desassemble(Code *code);
   private:
     csh handle;
     cs_insn *insn;
@@ -455,10 +464,10 @@ Desassembler::Desassembler(TextWindow *log) : log(log)
         log->append("Initialisation du désassembleur X86");
 }
 
-std::vector<std::array<std::string, 5>> Desassembler::Desassemble(unsigned char* code,size_t codesize,uint32_t address)
+std::vector<std::array<std::string, 5>> Desassembler::Desassemble(Code *code)
 {
     std::stringstream out;
-    srcsize=cs_disasm(handle, code, codesize, address, 0, &insn);
+    srcsize=cs_disasm(handle, code->content, code->size, code->address, 0, &insn);
     if (srcsize == 0)
         log->append("Erreur de désassemblage");
     else
@@ -488,18 +497,14 @@ class Assembler
 {
   public:
     Assembler(TextWindow *log);
-    unsigned char *Assemble(std::string source,uint32_t address);
-    size_t getCodesize();
+    Code *Assemble(std::string source,uint32_t address);
   private:
     ks_engine *ks;
     ks_err err;
     int err2;
     TextWindow *log;
     TextEditWindow *edit;
-    size_t srcsize;
-    size_t codesize;
-    std::string src;
-    unsigned char *code = new unsigned char[64*1024];
+    Code *code = new Code;
 };
 
 Assembler::Assembler(TextWindow *log) : log(log)
@@ -512,29 +517,27 @@ Assembler::Assembler(TextWindow *log) : log(log)
     }
     else
         log->append("Initialisation de l'assembleur X86");
+    code->assembled=false;
 }
 
-size_t Assembler::getCodesize()
-{
-    return codesize;
-}
-
-unsigned char *Assembler::Assemble(std::string source,uint32_t address)
+Code *Assembler::Assemble(std::string source,uint32_t address)
 {
     std::stringstream out;
-    src=source;
-    srcsize=src.size();
+    code->address=address;
+    size_t srcsize=source.size();
     unsigned char src_char[srcsize+1];
-    strcpy(reinterpret_cast<char*>(src_char), src.c_str());
-    err2=ks_asm(ks, reinterpret_cast<const char*>(src_char), address, &code, &codesize, &srcsize);
+    strcpy(reinterpret_cast<char*>(src_char), source.c_str());
+    err2=ks_asm(ks, reinterpret_cast<const char*>(src_char), code->address, &code->content, &code->size, &srcsize);
     if (err2 != KS_ERR_OK)
     {
         log->append("Erreur d'assemblage");
-        codesize=0;
+        code->size=0;
+        code->assembled=false;
     }
     else
     {  
-        out << "Assemblage réussi, taille du code :" << codesize;
+        out << "Assemblage réussi, taille du code :" << code->size;
+        code->assembled=true;
         log->append(out.str());
         /*out.str("");
         out.clear();
@@ -546,7 +549,7 @@ unsigned char *Assembler::Assemble(std::string source,uint32_t address)
                log->append(out.str());   
         }*/
     }
-    return reinterpret_cast<unsigned char*>(code);
+    return code;
 }
  
 //----------------------------------------------------------------------
@@ -556,8 +559,8 @@ class VMEngine
 {
   public:
     VMEngine(TextWindow *log);
-    void Configure(State *init);
-    void Run();
+    void Configure(State *init,Code *code);
+    void Run(uint32_t start, uint32_t stop);
   private:
     uc_engine *uc;
     uc_err err;
@@ -576,7 +579,7 @@ VMEngine::VMEngine(TextWindow *log) : log(log)
         log->append("Initialisation de l'ordinateur IA86");
 }
  
-void VMEngine::Configure(State *init)
+void VMEngine::Configure(State *init, Code *code)
 {
         std::stringstream out;
         out << "Configuration initiale de l'ordinateur IA86:\n  "; 
@@ -662,16 +665,18 @@ void VMEngine::Configure(State *init)
             else
                 out << "EAX=" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << init->dump.regs.eax << " ";               
         log->append(out.str());
+        uc_mem_map(uc, init->dump.regs.eip,code->size, UC_PROT_ALL);
+        if (uc_mem_write(uc, init->dump.regs.eip, code->content, code->size)) 
+        {
+            log->append("Erreur de copie mémoire dans la machine virtuelle");
+            return;
+        }
 }
 
-void VMEngine::Run()
+void VMEngine::Run(uint32_t start, uint32_t stop)
 {
-
+    err=uc_emu_start(uc, start, stop, 0, 0);
 }
-
-   /*uc_mem_map(uc, ADDRESS, 1 * 1024 * 1024, UC_PROT_ALL);
-   if (uc_mem_write(uc, ADDRESS, encode, sizecode)) {
-   error=uc_emu_start(uc, ADDRESS, ADDRESS + sizecode, 0, 0);*/
 
 //----------------------------------------------------------------------
 // Classe Menu
@@ -692,8 +697,7 @@ class Menu final : public finalcut::FDialog
     void loadGoal();
   private:
     int  scenario=0;
-    unsigned char *code;
-    bool compiled=false;
+    Code *code = new Code();
     void configureFileMenuItems();
     void initMenusCallBack ();
     void initMenus();
@@ -933,35 +937,39 @@ void Menu::loadGoal()
 void Menu::compile()
 {
   code=asmer.Assemble(edit.get(),goals[scenario].init.dump.regs.eip);
-  debug.set(unasmer.Desassemble(code,asmer.getCodesize(),goals[scenario].init.dump.regs.eip));
-  compiled=(asmer.getCodesize()>0);
+  debug.set(unasmer.Desassemble(code));
 }
 
 void Menu::verify()
 {
-  if (!compiled)
-  {
-    finalcut::FMessageBox::error(this, "Vous devez compiler le source d'abord !");
-    return;
-  }
+
 }
 
 void Menu::exec()
 {
-  verify(); 
-  vm.Configure(&goals[scenario].init);
+  if (!code->assembled)
+  {
+    finalcut::FMessageBox::error(this, "Vous devez compiler le source d'abord !");
+    return;
+  }  
+  vm.Configure(&goals[scenario].init,code);
 }
 
 void Menu::trace()
 {
-  verify();
-}
+  if (!code->assembled)
+  {
+    finalcut::FMessageBox::error(this, "Vous devez compiler le source d'abord !");
+    return;
+  }}
 
 void Menu::step()
 {
-  verify();
-
-}
+  if (!code->assembled)
+  {
+    finalcut::FMessageBox::error(this, "Vous devez compiler le source d'abord !");
+    return;
+  }}
 
 //----------------------------------------------------------------------
 // Fonction Main
