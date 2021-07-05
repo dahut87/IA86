@@ -8,13 +8,13 @@ all: dockerfile files run
 dockerfile:
 	docker build . -t maker
 
-files: ./test
+files: ./ia86
     
-test: ./test.cpp
+ia86: ./ia86.cpp
 	$(DOCKER) $(CC) -o $@ $^ $(LFLAGS)
 
 run:
-	$(XTERM) '$(DOCKER) bash -c "sleep 0.4;./test"'
+	$(XTERM) '$(DOCKER) bash -c "sleep 0.4;./ia86"'
 
 rerun: delete files run	
 
@@ -22,4 +22,4 @@ stop:
 	docker stop maker
 
 delete:
-	rm -rf ./test
+	rm -rf ./ia86
