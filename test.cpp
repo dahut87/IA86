@@ -140,6 +140,20 @@ class Goal {
 };
 
 //----------------------------------------------------------------------
+// Fonctions diverses
+//----------------------------------------------------------------------
+
+std::string intToHexString(int intValue, int size) {
+    string hexStr;
+    std::stringstream sstream;
+    sstream << std::setfill ('0') << std::setw(size)
+    << std::hex << (int)intValue;
+    hexStr= sstream.str();
+    sstream.clear();
+    return hexStr;
+}
+
+//----------------------------------------------------------------------
 // Objectifs de jeux
 //----------------------------------------------------------------------
 
@@ -147,7 +161,7 @@ class Goal {
 Goal goals[]=
 { 
     {
-      "L'instruction MOV et les registres","Le but est de bouger du registre AX au registre BX, l' ensemble des données", "Aide....", "inc ax\ndec cx\nmov ax,0x33",
+      "L'instruction MOV et les registres","Le but est de bouger du registre AX au registre BX, l' ensemble des données", "Aide....", "inc ax\ndec cx\nmov ax,0x33\nadd ax,[bx+2]",
       {
          {
             {},                       
@@ -166,6 +180,77 @@ Goal goals[]=
        }
     }
 };
+
+//----------------------------------------------------------------------
+// Classe ListWindow
+//----------------------------------------------------------------------
+
+class ListWindow final : public finalcut::FDialog
+{
+  public:
+    // Constructor
+    explicit ListWindow (finalcut::FWidget* = nullptr);
+    // Disable copy constructor
+    ListWindow (const ListWindow&) = delete;
+    // Destructor
+    ~ListWindow() override = default;
+    // Disable copy assignment operator (=)
+    ListWindow& operator = (const ListWindow&) = delete;
+    // Method
+    std::vector<std::array<std::string, 5>> get();
+    void set(std::vector<std::array<std::string, 5>> src);
+  private:
+    // Method
+    std::vector<std::array<std::string, 5>> content;
+    void initLayout() override;
+    void adjustSize() override;
+    // Data members
+    finalcut::FListView listview{this};
+};
+
+ListWindow::ListWindow (finalcut::FWidget* parent)
+  : finalcut::FDialog{parent}
+{
+
+  listview.ignorePadding();
+  listview.addColumn ("P");
+  listview.addColumn ("Adresse");
+  listview.addColumn ("Opcodes     ");
+  listview.addColumn ("Mnémo.");
+  listview.addColumn ("Opérandes");
+  listview.hideSortIndicator(true);
+  listview.setFocus();
+}
+
+std::vector<std::array<std::string, 5>> ListWindow::get()
+{
+    return content;
+}
+
+void ListWindow::set(std::vector<std::array<std::string, 5>> src)
+{
+  content=src;
+  listview.clear();
+  for (const auto& place : content)
+  {
+    const finalcut::FStringList line (place.begin(), place.end());
+    listview.insert (line);
+  }
+  
+}
+
+void ListWindow::initLayout()
+{
+  listview.setGeometry (FPoint{1, 2}, FSize{getWidth(), getHeight() - 1});
+  setMinimumSize (FSize{51, 6});
+  FDialog::initLayout();
+}
+
+void ListWindow::adjustSize()
+{
+  finalcut::FDialog::adjustSize();
+  listview.setGeometry (FPoint{1, 2}, FSize(getWidth(), getHeight() - 1));
+}
     
 //----------------------------------------------------------------------
 // Classe TextFixedWindow
@@ -186,7 +271,6 @@ class TextFixedWindow final : public finalcut::FDialog
     std::string get();
     void set(std::string str);
   private:
-    std::stringstream out;
     // Method
     void initLayout() override;
     void adjustSize() override;
@@ -204,6 +288,7 @@ TextFixedWindow::TextFixedWindow (finalcut::FWidget* parent)
 
 std::string TextFixedWindow::get()
 {
+  std::stringstream out;
   out << fixedtext.getText();
   return out.str();
 }
@@ -345,7 +430,7 @@ class Desassembler
 {
   public:
     Desassembler(TextWindow *log);
-    std::string Desassemble(unsigned char* code,size_t codesize,uint32_t address);
+    std::vector<std::array<std::string, 5>> Desassemble(unsigned char* code,size_t codesize,uint32_t address);
   private:
     csh handle;
     cs_insn *insn;
@@ -354,7 +439,7 @@ class Desassembler
     TextEditWindow *edit;
     size_t srcsize;
     size_t codesize;
-    std::string src;
+    std::vector<std::array<std::string, 5>> src;
     unsigned char *src_char = new unsigned char[64*1024];
 };
 
@@ -370,7 +455,7 @@ Desassembler::Desassembler(TextWindow *log) : log(log)
         log->append("Initialisation du désassembleur X86");
 }
 
-std::string Desassembler::Desassemble(unsigned char* code,size_t codesize,uint32_t address)
+std::vector<std::array<std::string, 5>> Desassembler::Desassemble(unsigned char* code,size_t codesize,uint32_t address)
 {
     std::stringstream out;
     srcsize=cs_disasm(handle, code, codesize, address, 0, &insn);
@@ -380,15 +465,22 @@ std::string Desassembler::Desassemble(unsigned char* code,size_t codesize,uint32
     {  
         out << "Désassemblage réussie, taille du source :" << srcsize;
         log->append(out.str());
-        out.str("");
-        out.clear();
 		for (size_t j = 0; j < srcsize; j++)
-		    out << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << insn[j].address << ":" << insn[j].mnemonic << " " << insn[j].op_str << "\n";
+		{
+		    std::string *bytes = new std::string("");
+		    for (size_t k = 0; k < insn[j].size; k++)
+                *bytes=*bytes+intToHexString((int)insn[j].bytes[k], 1);
+            std::string adresse = intToHexString((int)insn[j].address, 8);  
+		    std::string *menmonic = new std::string((char *)insn[j].mnemonic);
+		    std::string *op_str = new std::string((char *)insn[j].op_str);
+		    std::array<std::string, 5> *array = new  std::array<std::string, 5>{"", adresse, *bytes, *menmonic, *op_str};
+		    src.push_back(*array);
+        }
 		cs_free(insn, srcsize);
         if (codesize < 100)
             log->append(out.str());
     }
-    return out.str();
+    return src;
 }
 
 //----------------------------------------------------------------------
@@ -639,6 +731,7 @@ class Menu final : public finalcut::FDialog
     finalcut::FStatusBar     Statusbar{this};
     TextWindow               log{this};
     TextWindow               view{this};
+    ListWindow               debug{this};
     TextFixedWindow          regs{this};
     TextFixedWindow          flags{this};
     TextFixedWindow          stack{this};
@@ -705,6 +798,10 @@ void Menu::initWindows()
   screen.setText ("Ecran");
   screen.setGeometry ( FPoint { 105, 18 }, FSize{80, 25} );
   screen.show();
+  debug.setText ("Instructions");
+  debug.setGeometry ( FPoint { 42, 17 }, FSize{60, 27} );
+  debug.setResizeable();
+  debug.show();
 }
 
 void Menu::initMenus()
@@ -814,7 +911,7 @@ void Menu::compile()
 {
   unsigned char *result;
   result=asmer.Assemble(edit.get(),goals[scenario].init.dump.regs.eip);
-  unasmer.Desassemble(result,asmer.getCodesize(),goals[scenario].init.dump.regs.eip);
+  debug.set(unasmer.Desassemble(result,asmer.getCodesize(),goals[scenario].init.dump.regs.eip));
 }
 
 void Menu::exec()
