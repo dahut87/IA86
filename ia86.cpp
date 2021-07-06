@@ -18,7 +18,7 @@
 std::string intToHexString(int intValue, int size) {
     string hexStr;
     std::stringstream sstream;
-    sstream << std::setfill ('0') << std::setw(size) << std::hex << (int)intValue;
+    sstream << std::uppercase << std::setfill ('0') << std::setw(size) << std::hex << (int)intValue;
     hexStr= sstream.str();
     sstream.clear();
     return hexStr;
@@ -319,7 +319,7 @@ std::vector<std::array<std::string, 5>> Desassembler::Desassemble(Code *code)
 		{
 		    std::string *bytes = new std::string("");
 		    for (size_t k = 0; k < insn[j].size; k++)
-                *bytes=*bytes+intToHexString((int)insn[j].bytes[k], 1);
+                *bytes=*bytes+intToHexString((int)insn[j].bytes[k], 2);
             std::string adresse = intToHexString((int)insn[j].address, 8);  
 		    std::string *menmonic = new std::string((char *)insn[j].mnemonic);
 		    std::string *op_str = new std::string((char *)insn[j].op_str);
@@ -748,17 +748,25 @@ void Menu::AdjustWindows()
   screen.setGeometry ( FPoint { 105, 18 }, FSize{80, 25} );
   debug.setGeometry ( FPoint { 42, 17 }, FSize{60, 27} );
   scenar.setGeometry ( FPoint { 187, 01 }, FSize{23, 55} );
-    flags.hide();
-    stack.hide();
-    mem.hide();
-    screen.hide();
-    if (goals[scenar.getselected()].level > 3)
+  this->hide();
+  flags.hide();
+  stack.hide();
+  mem.hide();
+  screen.hide();
+  log.show();
+  edit.show();
+  view.show();
+  regs.show();
+  tuto.show();
+  debug.show();
+  scenar.show();
+  if (goals[scenar.getselected()].level > 3)
         flags.show();
-    if (goals[scenar.getselected()].level > 5)
+  if (goals[scenar.getselected()].level > 5)
         stack.show();
-    if (goals[scenar.getselected()].level > 2)
+  if (goals[scenar.getselected()].level > 2)
         mem.show();
-    if (goals[scenar.getselected()].level > 6)
+  if (goals[scenar.getselected()].level > 6)
         screen.show();              
 }
 
@@ -789,6 +797,8 @@ void Menu::initMenus()
   Breakpoint.setStatusbarMessage ("Enlève ou met un point d'arrêt"); 
   End.addAccelerator (FKey::F6);
   End.setStatusbarMessage ("Termine le programme et remet à zéro la machine IA86");
+  Init.addAccelerator (FKey::F3);
+  Init.setStatusbarMessage ("Initialise la machine IA86");
   About.setStatusbarMessage ("A propos de IA86"); 
 }
 
@@ -841,6 +851,17 @@ void Menu::initMenusCallBack()
     "clicked",
     this,
     &Menu::end
+  );
+  About.addCallback
+  (
+    "clicked",
+    this,
+    &Menu::about
+  );
+  Init.addCallback (
+    "clicked",
+    this,
+    &Menu::initIA
   );
 }
 
@@ -898,7 +919,6 @@ void Menu::loadGoal()
 
 void Menu::end()
 {
-  regs.set("En attente d'initialisation...");
   vm.Halt(code);
 }
 
@@ -906,6 +926,32 @@ void Menu::compile()
 {
   code=asmer.Assemble(edit.get(),goals[scenar.getselected()].init.dump.regs.eip);
   debug.set(unasmer.Desassemble(code));
+}
+
+void Menu::about()
+{
+  log.hide();
+  edit.hide();
+  view.hide();
+  regs.hide();
+  flags.hide();
+  stack.hide();
+  mem.hide();
+  tuto.hide();
+  screen.hide();
+  debug.hide();
+  scenar.hide();
+  this->show();
+  this->redraw();
+  this->Info.redraw();
+  //((finalcut::FApplication*)this->getParent())->sendQueuedEvents();
+  sleep(3);
+  AdjustWindows();
+}
+
+void Menu::initIA()
+{
+    vm.Prepare(&goals[scenar.getselected()].init,code);
 }
 
 bool Menu::verify()
@@ -916,7 +962,7 @@ bool Menu::verify()
     return false;
   }
   if (!code->initialized)
-    vm.Prepare(&goals[scenar.getselected()].init,code);
+    initIA();
   if (!code->initialized)
     return false;
   return true;
@@ -925,9 +971,15 @@ bool Menu::verify()
 void Menu::refresh()
 {
   if (!code->executed)
+  {
     finalcut::FApplication::setDarkTheme();
+    regs.set("En attente d'initialisation...");
+  }
   else
+  {
     finalcut::FApplication::setDefaultTheme();
+    regs.set(vm.getRegs(goals[scenar.getselected()].level));
+  }
   auto root_widget = getRootWidget();
   root_widget->resetColors();
   root_widget->redraw();
@@ -938,7 +990,6 @@ void Menu::exec()
 {
   if (!verify()) return;
   vm.Run(code,code->address,code->address+code->size,0);
-  regs.set(vm.getRegs(goals[scenar.getselected()].level));
 }
 
 void Menu::trace()

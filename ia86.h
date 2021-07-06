@@ -320,9 +320,10 @@ class Menu final : public finalcut::FDialog
     void trace();
     void step();
     bool verify();
+    void about();
     void AdjustWindows();
     void initWindows();
-    void splash();
+    void initIA();
     void initLayout() override;
     void adjustSize() override;
     // Event handler
@@ -341,6 +342,7 @@ class Menu final : public finalcut::FDialog
     finalcut::FMenuItem      Assemble{"&Compilation", &Tools};
     finalcut::FMenuItem      Rearange{"&Ordonne les fenêtres", &Tools};
     finalcut::FMenu          Debug{"&Déboguage", &Menubar};
+    finalcut::FMenuItem      Init{"&Initialiser", &Debug};
     finalcut::FMenuItem      Run{"&Exécuter", &Debug};
     finalcut::FMenuItem      End{"&Terminer", &Debug};
     finalcut::FMenuItem      TraceInto{"Pas à pas &détaillé", &Debug}; 
