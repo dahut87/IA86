@@ -153,6 +153,12 @@ std::vector<std::array<std::string, 5>> InstructionWindow::get()
     return content;
 }
 
+void InstructionWindow::clear()
+{
+  listview.clear();
+  listview.redraw();
+}
+
 void InstructionWindow::set(std::vector<std::array<std::string, 5>> src)
 {
   content=src;
@@ -162,7 +168,7 @@ void InstructionWindow::set(std::vector<std::array<std::string, 5>> src)
     const finalcut::FStringList line (place.begin(), place.end());
     listview.insert (line);
   }
-  
+  listview.redraw();
 }
 
 void InstructionWindow::initLayout()
@@ -176,43 +182,7 @@ void InstructionWindow::adjustSize()
 {
   finalcut::FDialog::adjustSize();
   listview.setGeometry (FPoint{1, 2}, FSize(getWidth(), getHeight() - 1));
-}
-    
-//----------------------------------------------------------------------
-// Classe TextFixedWindow
-//----------------------------------------------------------------------
-
-TextFixedWindow::TextFixedWindow (finalcut::FWidget* parent)
-  : finalcut::FDialog{parent}
-{
-
-  fixedtext.ignorePadding();
-  fixedtext.setFocus();
-}
-
-std::string TextFixedWindow::get()
-{
-  std::stringstream out;
-  out << fixedtext.getText();
-  return out.str();
-}
-
-void TextFixedWindow::set(std::string str)
-{
-  fixedtext.setText(str);
-}
-
-void TextFixedWindow::initLayout()
-{
-  fixedtext.setGeometry (FPoint{2, 3}, FSize{getWidth()-2, getHeight() - 2});
-  FDialog::initLayout();
-}
-
-void TextFixedWindow::adjustSize()
-{
-  finalcut::FDialog::adjustSize();
-  fixedtext.setGeometry (FPoint{2, 3}, FSize(getWidth()-2, getHeight() - 2));
-}
+}    
 
 //----------------------------------------------------------------------
 // Classe TextEditWindow
@@ -221,32 +191,49 @@ void TextFixedWindow::adjustSize()
 TextEditWindow::TextEditWindow (finalcut::FWidget* parent)
   : finalcut::FDialog{parent}
 {
-  fixedtext.ignorePadding();
-  fixedtext.setFocus();
+  scrolltext.ignorePadding();
+  scrolltext.setFocus();
+}
+
+void TextEditWindow::onClose(finalcut::FCloseEvent*) 
+{
+  return;    
+}
+
+void TextEditWindow::append(const finalcut::FString& str)
+{
+  scrolltext.append(str);
+  scrolltext.scrollBy (0, 10);
 }
 
 std::string TextEditWindow::get()
 {
-  std::stringstream out;
-  out << fixedtext.getText();
-  return out.str();
+  return scrolltext.getText().toString () ;
 }
 
-void TextEditWindow::set(std::string str)
+void TextEditWindow::set(const finalcut::FString& str)
 {
-  fixedtext.setText(str);
+  scrolltext.clear(); 
+  scrolltext.append(str);
+  scrolltext.redraw();
 }
+
+void TextEditWindow::clear()
+{
+  scrolltext.clear();
+}
+
 
 void TextEditWindow::initLayout()
 {
-  fixedtext.setGeometry (FPoint{2, 3}, FSize{getWidth()-2, getHeight() - 2});
+  scrolltext.setGeometry (FPoint{1, 2}, FSize{getWidth(), getHeight() - 1});
   FDialog::initLayout();
 }
 
 void TextEditWindow::adjustSize()
 {
   finalcut::FDialog::adjustSize();
-  fixedtext.setGeometry (FPoint{2, 3}, FSize{getWidth()-2, getHeight() - 2});
+  scrolltext.setGeometry (FPoint{1, 2}, FSize(getWidth(), getHeight() - 1));
 }
 
 //----------------------------------------------------------------------
@@ -269,6 +256,18 @@ void TextWindow::append(const finalcut::FString& str)
 {
   scrolltext.append(str);
   scrolltext.scrollBy (0, 10);
+}
+
+std::string TextWindow::get()
+{
+  return scrolltext.getText().toString () ;
+}
+
+void TextWindow::set(const finalcut::FString& str)
+{
+  scrolltext.clear(); 
+  scrolltext.append(str);
+  scrolltext.redraw();
 }
 
 void TextWindow::clear()
@@ -387,14 +386,7 @@ Code *Assembler::Assemble(std::string source,uint32_t address)
 
 VMEngine::VMEngine(TextWindow *log) : log(log)
 {
-    std::stringstream out; 
-    err = uc_open(UC_ARCH_X86, UC_MODE_16, &uc);
-    if (err != UC_ERR_OK) {
-        out << "Impossible d'initialiser la machine virtuelle: " << err;
-        log->append(out.str());
-    }
-    else
-        log->append("Initialisation de l'ordinateur IA86");
+    Init();
 }
 // Level  1 : IP AL
 // Level  2 : IP AX
@@ -506,8 +498,64 @@ std::string VMEngine::getRegs(int level)
         out << "EFLAGS:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[15] << ""; 
     return out.str();
 }
- 
+
+void VMEngine::Init()
+{
+    std::stringstream out; 
+    err = uc_open(UC_ARCH_X86, UC_MODE_16, &uc);
+    if (err != UC_ERR_OK) {
+        out << "Impossible d'initialiser la machine virtuelle: " << err;
+        log->append(out.str());
+    }
+    else
+        log->append("Initialisation de l'ordinateur IA86");
+}
+
+void VMEngine::Close()
+{
+   uc_close(uc);
+}
+
+void VMEngine::Halt(Code *code)
+{
+   code->executed=false;
+}
+
 void VMEngine::Configure(State *init, Code *code)
+{
+    Close();
+    Init();
+    code->assembled=false;
+    code->initialized=false;
+    code->executed=false;
+    log->append("Mappage de la mémoire virtuelle");
+    uc_mem_map(uc, init->dump.regs.eip, 1 * 1024 * 1024, UC_PROT_ALL);
+}
+
+void VMEngine::Prepare(State *init, Code *code)
+{
+    SetMem(init, code);
+    SetRegs(init, code);
+}
+
+void VMEngine::SetMem(State *init, Code *code)
+{
+
+        err = uc_mem_write(uc, init->dump.regs.eip, code->content, code->size);
+        if (err) 
+        {
+            code->initialized=false;
+            log->append("Erreur de copie mémoire dans la machine virtuelle");
+            return;
+        }
+        else
+        {
+            code->initialized=true;
+            log->append("Chargement en mémoire de la machine virtuelle, taille: "+to_string(code->size));
+        }
+}
+ 
+void VMEngine::SetRegs(State *init, Code *code)
 {
         std::stringstream out;
         out << "Configuration initiale de l'ordinateur IA86:\n  "; 
@@ -593,16 +641,6 @@ void VMEngine::Configure(State *init, Code *code)
             else
                 out << "EAX=" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << init->dump.regs.eax << " ";               
         log->append(out.str());
-        uc_mem_map(uc, init->dump.regs.eip, 1 * 1024 * 1024, UC_PROT_ALL);
-        err = uc_mem_write(uc, init->dump.regs.eip, code->content, code->size);
-        if (err) 
-        {
-            code->loaded=false;
-            log->append("Erreur de copie mémoire dans la machine virtuelle");
-            return;
-        }
-        else
-            code->loaded=true;
 }
 
 void VMEngine::Run(Code *code,uint32_t start, uint32_t stop, uint64_t timeout)
@@ -641,6 +679,7 @@ void Menu::initNow()
 
 void Menu::initCore()
 {
+  addTimer (50);
   loadGoal();
 }
 
@@ -663,20 +702,16 @@ void Menu::initWindows()
   regs.show();
   flags.setText ("Drapeaux");
   flags.setGeometry ( FPoint { 60, 01 }, FSize{15, 15} );
-  flags.show();
   stack.setText ("Pile");
   stack.setGeometry ( FPoint { 43, 01 }, FSize{15, 15} );
-  stack.show();
   mem.setText ("Mémoire");
   mem.setGeometry ( FPoint { 77, 01 }, FSize{108, 15} );
-  mem.show();
   tuto.setText ("Guide");
   tuto.setGeometry ( FPoint { 125, 45 }, FSize{60, 11} );
   tuto.setResizeable();
   tuto.show();
   screen.setText ("Ecran");
   screen.setGeometry ( FPoint { 105, 18 }, FSize{80, 25} );
-  screen.show();
   debug.setText ("Instructions");
   debug.setGeometry ( FPoint { 42, 17 }, FSize{60, 27} );
   debug.setResizeable();
@@ -702,6 +737,17 @@ void Menu::initWindows()
 
 void Menu::AdjustWindows()
 {
+  log.setGeometry ( FPoint { 63, 45 }, FSize{60, 11} );
+  edit.setGeometry ( FPoint { 01, 17 }, FSize{39, 27} );
+  view.setGeometry ( FPoint { 01, 45 }, FSize{60, 11} );
+  regs.setGeometry ( FPoint { 01, 01 }, FSize{40, 15} );
+  flags.setGeometry ( FPoint { 60, 01 }, FSize{15, 15} );
+  stack.setGeometry ( FPoint { 43, 01 }, FSize{15, 15} );
+  mem.setGeometry ( FPoint { 77, 01 }, FSize{108, 15} );
+  tuto.setGeometry ( FPoint { 125, 45 }, FSize{60, 11} );
+  screen.setGeometry ( FPoint { 105, 18 }, FSize{80, 25} );
+  debug.setGeometry ( FPoint { 42, 17 }, FSize{60, 27} );
+  scenar.setGeometry ( FPoint { 187, 01 }, FSize{23, 55} );
     flags.hide();
     stack.hide();
     mem.hide();
@@ -729,7 +775,7 @@ void Menu::initMenus()
   New.setStatusbarMessage ("Debuter une nouvelle partie"); 
   Quit.addAccelerator (FKey::Meta_x);
   Quit.setStatusbarMessage ("Quitter IA86"); 
-  Run.addAccelerator (FKey::Meta_f9);
+  Run.addAccelerator (FKey::F9);
   Run.setStatusbarMessage ("Exécuter le programme - seul un breakpoint arrête"); 
   TraceInto.addAccelerator (FKey::F7);
   TraceInto.setStatusbarMessage ("Pas à pas détaillé - entre dans les CALL"); 
@@ -737,13 +783,18 @@ void Menu::initMenus()
   StepOver.setStatusbarMessage ("Pas à pas - ne rentre pas dans les CALL"); 
   Assemble.addAccelerator (FKey::F2);
   Assemble.setStatusbarMessage ("Assemble le source vers du code machine"); 
-  Rearange.addAccelerator (FKey::F1);
+  Rearange.addAccelerator (FKey::Meta_r);
   Rearange.setStatusbarMessage ("Reorganise les fenêtres dans leur état initial");   
   Breakpoint.addAccelerator (FKey::F5);
   Breakpoint.setStatusbarMessage ("Enlève ou met un point d'arrêt"); 
-  End.addAccelerator (FKey::Meta_f2);
+  End.addAccelerator (FKey::F6);
   End.setStatusbarMessage ("Termine le programme et remet à zéro la machine IA86");
   About.setStatusbarMessage ("A propos de IA86"); 
+}
+
+void Menu::onTimer (finalcut::FTimerEvent* ev)
+{
+  refresh();
 }
 
 void Menu::initMenusCallBack()
@@ -785,6 +836,12 @@ void Menu::initMenusCallBack()
     this,
     &Menu::step
   );
+  End.addCallback
+  (
+    "clicked",
+    this,
+    &Menu::end
+  );
 }
 
 void Menu::initMisc()
@@ -825,11 +882,24 @@ void Menu::onClose (finalcut::FCloseEvent* ev)
 
 void Menu::loadGoal()
 {
+  log.append("Chargement du scénario "+goals[scenar.getselected()].title);
   view.setText("Objectif: "+goals[scenar.getselected()].title);
   view.clear();
   view.append(goals[scenar.getselected()].description);
+  tuto.clear();
+  tuto.append(goals[scenar.getselected()].help);
+  regs.set("En attente d'initialisation...");
   edit.set(goals[scenar.getselected()].code);
   AdjustWindows();
+  debug.clear();
+  vm.Configure(&goals[scenar.getselected()].init,code);
+  end();
+}
+
+void Menu::end()
+{
+  regs.set("En attente d'initialisation...");
+  vm.Halt(code);
 }
 
 void Menu::compile()
@@ -838,44 +908,47 @@ void Menu::compile()
   debug.set(unasmer.Desassemble(code));
 }
 
-void Menu::verify()
+bool Menu::verify()
 {
+  if (!code->assembled)
+  {
+    finalcut::FMessageBox::error(this, "Vous devez compiler le source d'abord !");
+    return false;
+  }
+  if (!code->initialized)
+    vm.Prepare(&goals[scenar.getselected()].init,code);
+  if (!code->initialized)
+    return false;
+  return true;
+}
+
+void Menu::refresh()
+{
+  if (!code->executed)
+    finalcut::FApplication::setDarkTheme();
+  else
+    finalcut::FApplication::setDefaultTheme();
+  auto root_widget = getRootWidget();
+  root_widget->resetColors();
+  root_widget->redraw();
 
 }
 
 void Menu::exec()
 {
-  if (!code->assembled)
-  {
-    finalcut::FMessageBox::error(this, "Vous devez compiler le source d'abord !");
-    return;
-  }
-  if (!code->executed)
-    vm.Configure(&goals[scenar.getselected()].init,code);
+  if (!verify()) return;
   vm.Run(code,code->address,code->address+code->size,0);
   regs.set(vm.getRegs(goals[scenar.getselected()].level));
 }
 
 void Menu::trace()
 {
-  if (!code->assembled)
-  {
-    finalcut::FMessageBox::error(this, "Vous devez compiler le source d'abord !");
-    return;
-  }
-  if (!code->executed)
-    vm.Configure(&goals[scenar.getselected()].init,code);  
+  if (!verify()) return; 
 }
 
 void Menu::step()
 {
-  if (!code->assembled)
-  {
-    finalcut::FMessageBox::error(this, "Vous devez compiler le source d'abord !");
-    return;
-  }
-  if (!code->executed)
-    vm.Configure(&goals[scenar.getselected()].init,code);  
+  if (!verify()) return;  
 }
 
 //----------------------------------------------------------------------
@@ -890,6 +963,7 @@ int main (int argc, char* argv[])
   main_dlg.setSize ({50, 14});
   main_dlg.setShadow();
   main_dlg.show();
+  finalcut::FApplication::setDarkTheme();
   finalcut::FWidget::setMainWidget (&main_dlg);
   //usleep(5 * 1000000);
   main_dlg.hide();

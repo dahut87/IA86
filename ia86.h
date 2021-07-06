@@ -3,8 +3,11 @@ using std::cout; using std::endl;
 using std::vector; using std::string;
 
 using FKey = finalcut::FKey;
+using finalcut::FColor;
 using finalcut::FPoint;
+using finalcut::FRect;
 using finalcut::FSize;
+
 
 //----------------------------------------------------------------------
 // Types & classes mineures
@@ -137,8 +140,8 @@ class Code
         size_t size;
         unsigned char *content;
         bool assembled;
+        bool initialized;
         bool executed;
-        bool loaded;
 };
 
 class ScenarioWindow final : public finalcut::FDialog
@@ -178,6 +181,7 @@ class InstructionWindow final : public finalcut::FDialog
     // Method
     std::vector<std::array<std::string, 5>> get();
     void set(std::vector<std::array<std::string, 5>> src);
+    void clear();
   private:
     // Method
     std::vector<std::array<std::string, 5>> content;
@@ -185,29 +189,6 @@ class InstructionWindow final : public finalcut::FDialog
     void adjustSize() override;
     // Data members
     finalcut::FListView listview{this};
-};
-
-
-class TextFixedWindow final : public finalcut::FDialog
-{
-  public:
-    // Constructor
-    explicit TextFixedWindow (finalcut::FWidget* = nullptr);
-    // Disable copy constructor
-    TextFixedWindow (const TextFixedWindow&) = delete;
-    // Destructor
-    ~TextFixedWindow() override = default;
-    // Disable copy assignment operator (=)
-    TextFixedWindow& operator = (const TextFixedWindow&) = delete;
-    // Method
-    std::string get();
-    void set(std::string str);
-  private:
-    // Method
-    void initLayout() override;
-    void adjustSize() override;
-    // Data members
-    finalcut::FLabel fixedtext{this};
 };
 
 class TextEditWindow final : public finalcut::FDialog
@@ -222,14 +203,17 @@ class TextEditWindow final : public finalcut::FDialog
     // Disable copy assignment operator (=)
     TextEditWindow& operator = (const TextEditWindow&) = delete;
     // Method
+    void append(const finalcut::FString&);
+    void clear();
     std::string get();
-    void set(std::string str);
+    void set(const finalcut::FString&);
   private:
     // Method
+    void onClose(finalcut::FCloseEvent*) override;
     void initLayout() override;
     void adjustSize() override;
     // Data members
-    finalcut::FLabel fixedtext{this};
+    finalcut::FTextView scrolltext{this};
 };
 
 class TextWindow final : public finalcut::FDialog
@@ -246,6 +230,8 @@ class TextWindow final : public finalcut::FDialog
     // Method
     void append(const finalcut::FString&);
     void clear();
+    std::string get();
+    void set(const finalcut::FString&);
   private:
     // Method
     void onClose(finalcut::FCloseEvent*) override;
@@ -291,9 +277,15 @@ class VMEngine
   public:
     VMEngine(TextWindow *log);
     void Configure(State *init,Code *code);
+    void Halt(Code *code);
     void Run(Code *code, uint32_t start, uint32_t stop, uint64_t timeout);
     std::string getRegs(int level);
+    void Prepare(State *init, Code *code);
+    void SetMem(State *init, Code *code);
+    void SetRegs(State *init, Code *code);
   private:
+    void Init();
+    void Close();
     uc_engine *uc;
     uc_err err;
     TextWindow *log;
@@ -314,6 +306,8 @@ class Menu final : public finalcut::FDialog
     void loadGoal();
   private:
     Code *code = new Code();
+    void onTimer (finalcut::FTimerEvent*) override;
+    void refresh();
     void configureFileMenuItems();
     void initMenusCallBack ();
     void initMenus();
@@ -321,10 +315,11 @@ class Menu final : public finalcut::FDialog
     void initNow();
     void initCore();
     void compile();
+    void end();
     void exec();
     void trace();
     void step();
-    void verify();
+    bool verify();
     void AdjustWindows();
     void initWindows();
     void splash();
@@ -358,17 +353,18 @@ class Menu final : public finalcut::FDialog
     finalcut::FStatusBar     Statusbar{this};
     TextWindow               log{this};
     TextWindow               view{this};
-    InstructionWindow               debug{this};
-    TextFixedWindow          regs{this};
-    TextFixedWindow          flags{this};
-    TextFixedWindow          stack{this};
-    TextFixedWindow          mem{this};
-    TextFixedWindow          tuto{this};
-    TextFixedWindow          screen{this};
+    InstructionWindow        debug{this};
+    TextWindow               regs{this};
+    TextWindow               flags{this};
+    TextWindow               stack{this};
+    TextWindow               mem{this};
+    TextWindow               tuto{this};
+    TextWindow               screen{this};
     TextEditWindow           edit{this};
     ScenarioWindow           scenar{this};
     VMEngine                 vm{&log};
     Assembler                asmer{&log};
     Desassembler             unasmer{&log};
 };
+
 
