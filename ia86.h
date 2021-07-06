@@ -167,6 +167,27 @@ class ScenarioWindow final : public finalcut::FDialog
     finalcut::FListView listview{this};
 };
 
+
+namespace finalcut
+{
+class FListViewEx final : public finalcut::FListView
+{
+  public:
+    // Using-declaration
+    using FWidget::setGeometry;
+    using FListViewItems = std::list<FListViewItem*>;
+    // Constructor
+    explicit FListViewEx (FWidget* = nullptr);
+    // Disable copy constructor
+    FListViewEx (const FListViewEx&) = delete;
+    // Destructor
+    ~FListViewEx() override;
+    // Disable copy assignment operator (=)
+    FListViewEx& operator = (const FListViewEx&) = delete;
+    void setindex(int index);
+};
+}
+
 class InstructionWindow final : public finalcut::FDialog
 {
   public:
@@ -182,13 +203,14 @@ class InstructionWindow final : public finalcut::FDialog
     std::vector<std::array<std::string, 5>> get();
     void set(std::vector<std::array<std::string, 5>> src);
     void clear();
+    void setindex(int index);
   private:
     // Method
     std::vector<std::array<std::string, 5>> content;
     void initLayout() override;
     void adjustSize() override;
     // Data members
-    finalcut::FListView listview{this};
+    finalcut::FListViewEx listview{this};
 };
 
 class TextEditWindow final : public finalcut::FDialog
@@ -283,6 +305,7 @@ class VMEngine
     void Prepare(State *init, Code *code);
     void SetMem(State *init, Code *code);
     void SetRegs(State *init, Code *code);
+    int getEIP(Code *code);
   private:
     void Init();
     void Close();
@@ -323,7 +346,6 @@ class Menu final : public finalcut::FDialog
     void about();
     void AdjustWindows();
     void initWindows();
-    void initIA();
     void initLayout() override;
     void adjustSize() override;
     // Event handler

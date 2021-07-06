@@ -130,6 +130,26 @@ void ScenarioWindow::adjustSize()
   listview.setGeometry (FPoint{1, 2}, FSize(getWidth(), getHeight() - 1));
 }
 
+
+//----------------------------------------------------------------------
+// Classe FListViewEx
+//----------------------------------------------------------------------
+namespace finalcut
+{
+FListViewEx::FListViewEx (FWidget* parent)
+  : FListView{parent}
+{
+}
+
+FListViewEx::~FListViewEx()
+{
+}
+
+void FListViewEx::setindex(int index)
+{
+}
+}
+
 //----------------------------------------------------------------------
 // Classe InstructionWindow
 //----------------------------------------------------------------------
@@ -157,6 +177,11 @@ void InstructionWindow::clear()
 {
   listview.clear();
   listview.redraw();
+}
+
+void InstructionWindow::setindex(int index)
+{
+  listview.setindex(index);
 }
 
 void InstructionWindow::set(std::vector<std::array<std::string, 5>> src)
@@ -538,6 +563,17 @@ void VMEngine::Prepare(State *init, Code *code)
     SetRegs(init, code);
 }
 
+int VMEngine::getEIP(Code *code)
+{
+        int eip=-666;
+        err = uc_reg_read(uc, UC_X86_REG_EIP, &eip);
+        if (err != UC_ERR_OK)
+           log->append("Impossible de récupérer le registre: EIP");
+        if ((eip<code->address) || (eip>code->address+code->size))
+            eip=-666;
+        return eip;
+        }
+
 void VMEngine::SetMem(State *init, Code *code)
 {
 
@@ -861,7 +897,7 @@ void Menu::initMenusCallBack()
   Init.addCallback (
     "clicked",
     this,
-    &Menu::initIA
+    &Menu::verify
   );
 }
 
@@ -949,11 +985,6 @@ void Menu::about()
   AdjustWindows();
 }
 
-void Menu::initIA()
-{
-    vm.Prepare(&goals[scenar.getselected()].init,code);
-}
-
 bool Menu::verify()
 {
   if (!code->assembled)
@@ -962,7 +993,7 @@ bool Menu::verify()
     return false;
   }
   if (!code->initialized)
-    initIA();
+    vm.Prepare(&goals[scenar.getselected()].init,code);
   if (!code->initialized)
     return false;
   return true;
@@ -970,15 +1001,23 @@ bool Menu::verify()
 
 void Menu::refresh()
 {
+  if (!code->initialized)
+  {
+    regs.set("En attente d'initialisation...");  
+    debug.setindex(-666);  
+  }
+  else
+  {
+    regs.set(vm.getRegs(goals[scenar.getselected()].level));
+    debug.setindex(vm.getEIP(code));  
+  }
   if (!code->executed)
   {
     finalcut::FApplication::setDarkTheme();
-    regs.set("En attente d'initialisation...");
   }
   else
   {
     finalcut::FApplication::setDefaultTheme();
-    regs.set(vm.getRegs(goals[scenar.getselected()].level));
   }
   auto root_widget = getRootWidget();
   root_widget->resetColors();
