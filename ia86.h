@@ -167,27 +167,6 @@ class ScenarioWindow final : public finalcut::FDialog
     finalcut::FListView listview{this};
 };
 
-
-namespace finalcut
-{
-class FListViewEx final : public finalcut::FListView
-{
-  public:
-    // Using-declaration
-    using FWidget::setGeometry;
-    using FListViewItems = std::list<FListViewItem*>;
-    // Constructor
-    explicit FListViewEx (FWidget* = nullptr);
-    // Disable copy constructor
-    FListViewEx (const FListViewEx&) = delete;
-    // Destructor
-    ~FListViewEx() override;
-    // Disable copy assignment operator (=)
-    FListViewEx& operator = (const FListViewEx&) = delete;
-    void setindex(int index);
-};
-}
-
 class InstructionWindow final : public finalcut::FDialog
 {
   public:
@@ -210,7 +189,7 @@ class InstructionWindow final : public finalcut::FDialog
     void initLayout() override;
     void adjustSize() override;
     // Data members
-    finalcut::FListViewEx listview{this};
+    finalcut::FListView listview{this};
 };
 
 class TextEditWindow final : public finalcut::FDialog

@@ -12,7 +12,7 @@ RUN apk --no-cache add bash util-linux coreutils curl make cmake gcc g++ libstdc
 		       git sed tar wget gzip indent binutils hexdump dos2unix xxd autoconf automake autoconf-archive\ 
                        libtool linux-headers ncurses-dev
 WORKDIR /usr/src/
-RUN git clone git://github.com/gansm/finalcut.git 
+RUN git clone https://github.com/dahut87/finalcut.git
 WORKDIR /usr/src/finalcut
 RUN autoreconf --install --force && ./configure --prefix=/usr && make && make install
 

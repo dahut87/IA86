@@ -132,25 +132,6 @@ void ScenarioWindow::adjustSize()
 
 
 //----------------------------------------------------------------------
-// Classe FListViewEx
-//----------------------------------------------------------------------
-namespace finalcut
-{
-FListViewEx::FListViewEx (FWidget* parent)
-  : FListView{parent}
-{
-}
-
-FListViewEx::~FListViewEx()
-{
-}
-
-void FListViewEx::setindex(int index)
-{
-}
-}
-
-//----------------------------------------------------------------------
 // Classe InstructionWindow
 //----------------------------------------------------------------------
 
