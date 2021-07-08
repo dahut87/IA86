@@ -106,41 +106,42 @@ using finalcut::FSize;
          struct i386_regs regs;
          uint32_t flags;
  } __attribute__ (( packed ));
- 
-    
-struct Memzone
-{
-        uint32_t address;
-        uint32_t size;
-        std::string code;
-        uint8_t *content;
-};
 
 struct State {
         i386_all_regs dump;
-        std::vector<Memzone> memzone;
+        std::string code;
 };
     
 struct Level {
         std::string title;
         std::string description;
         std::string tutorial;
-        std::string code;  
-        int level;      
+        std::string code;
+        int rights;      
         State init;
         State goal;        
 };
 
 struct Scenario {
     std::string title;
-    std::vector<Level> Levels;
+    std::vector<Level> levels;
 };
 
 struct Code
 {
-    std::vector<Memzone> memzones;
-    bool assembled;
-    bool initialized;
+        uint32_t address;
+        size_t size;
+        uint8_t *content;
+        bool assembled;
+        bool initialized;
+        bool executed;
+        std::string code;
+};
+
+struct MultiCode
+{
+    std::vector<Code> zones;
+    uint32_t entrypoint;
     bool executed;
 };
 
@@ -264,7 +265,9 @@ class Assembler
   public:
     Assembler(TextWindow *log);
     Code *Assemble(std::string source,uint32_t address);
+    MultiCode *MultiAssemble(std::string source,uint32_t address);
   private:
+    MultiCode *Createzone(std::string source);
     ks_engine *ks;
     ks_err err;
     int err2;
@@ -307,6 +310,7 @@ class Menu final : public finalcut::FDialog
     Menu& operator = (const Menu&) = delete;
      // Methods
     void loadLevel();
+    TextWindow               log{this};
   private:
     Code *code = new Code();
     void onTimer (finalcut::FTimerEvent*) override;
@@ -355,7 +359,6 @@ class Menu final : public finalcut::FDialog
     finalcut::FMenuItem      About{"&A propos", &Help}; 
     finalcut::FLabel         Info{this};
     finalcut::FStatusBar     Statusbar{this};
-    TextWindow               log{this};
     TextWindow               view{this};
     InstructionWindow        debug{this};
     TextWindow               regs{this};

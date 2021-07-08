@@ -29,16 +29,16 @@ std::string intToHexString(int intValue, int size) {
 void mapping()
 {
     struct_mapping::reg(&Scenario::title, "scenario_titre");
-    struct_mapping::reg(&Scenario::Levels, "scenario_objectifs");
+    struct_mapping::reg(&Scenario::levels, "scenario_objectifs");
     struct_mapping::reg(&Level::title, "niveau_titre");
     struct_mapping::reg(&Level::description, "niveau_description");
     struct_mapping::reg(&Level::tutorial, "niveau_tutoriel");
     struct_mapping::reg(&Level::code, "niveau_code");
-    struct_mapping::reg(&Level::level, "niveau_droits");
+    struct_mapping::reg(&Level::rights, "niveau_droits");
     struct_mapping::reg(&Level::init, "niveau_initial");
     struct_mapping::reg(&Level::goal, "niveau_objectif");
     struct_mapping::reg(&State::dump, "registres");
-    struct_mapping::reg(&State::memzone, "memoires");
+    struct_mapping::reg(&State::code, "code");
     struct_mapping::reg(&i386_all_regs::segs, "segments");
     struct_mapping::reg(&i386_all_regs::regs, "généraux");
     struct_mapping::reg(&i386_all_regs::flags, "drapeaux");
@@ -81,18 +81,22 @@ Scenario scenario;
 ScenarioWindow::ScenarioWindow (finalcut::FWidget* parent)
   : finalcut::FDialog{parent}
 {
+  ((Menu*)this->getParent())->log.append("Chargement des scénarios");
   scenario=readscenario("./scenarios.txt");
+  if (scenario.levels.size()==0) 
+    finalcut::FMessageBox::error(this, "Impossible de charger le scénario par défaut !");
   listview.ignorePadding();
   listview.addColumn ("*");
   listview.addColumn ("Intitulé");  
   listview.hideSortIndicator(true);
   listview.setFocus();
   std::vector<std::string> items;
-  for(size_t i=0; i < (sizeof(scenario.Levels)/sizeof(scenario.Levels[0])); i++)
+  for(size_t i=0; i < scenario.levels.size(); i++)
   {
+    ((Menu*)this->getParent())->log.append(".");
     items.clear();
     items.push_back(to_string(i));
-    items.push_back(scenario.Levels[i].title);
+    items.push_back(scenario.levels[i].title);
     const finalcut::FStringList line (items.begin(), items.end());    
     listview.insert (line);
   }
@@ -105,9 +109,7 @@ ScenarioWindow::ScenarioWindow (finalcut::FWidget* parent)
 
 void ScenarioWindow::click()
 {
-    const auto& item = listview.getCurrentItem();
-    std::string temp=item->getText(1).toString();
-    selected=stoi(temp);
+    selected=listview.getindex();
     ((Menu*)this->getParent())->loadLevel();
 }
 
@@ -352,14 +354,23 @@ Assembler::Assembler(TextWindow *log) : log(log)
     code->assembled=false;
 }
 
+MultiCode *Assembler::Createzone(std::string source)
+{
+
+}
+
+MultiCode *Assembler::MultiAssemble(std::string source,uint32_t address)
+{
+
+}
+
 Code *Assembler::Assemble(std::string source,uint32_t address)
 {
     std::stringstream out;
-    code->address=address;
     size_t srcsize=source.size();
     unsigned char src_char[srcsize+1];
     strcpy(reinterpret_cast<char*>(src_char), source.c_str());
-    err2=ks_asm(ks, reinterpret_cast<const char*>(src_char), code->address, &code->content, &code->size, &srcsize);
+    err2=ks_asm(ks, reinterpret_cast<const char*>(src_char), address, &code->content, &code->size, &srcsize);
     if (err2 != KS_ERR_OK)
     {
         log->append("Erreur d'assemblage");
@@ -404,7 +415,7 @@ VMEngine::VMEngine(TextWindow *log) : log(log)
 // Level 10 : EIP EAX EBX ECX EDX EFLAGS ESI EDI ESP EBP CS DS ES SS FS GS ST0 ST1 ST2 ST3 ST4 ST5 ST6 ST7
 // Level 11 : EIP EAX EBX ECX EDX EFLAGS ESI EDI ESP EBP CS DS ES SS FS GS ST0 ST1 ST2 ST3 ST4 ST5 ST6 ST7 CR0 CR2 CR3 CR4 CR8 
 // Level 12 : EIP EAX EBX ECX EDX EFLAGS ESI EDI ESP EBP CS DS ES SS FS GS ST0 ST1 ST2 ST3 ST4 ST5 ST6 ST7 CR0 CR2 CR3 CR4 CR8 DB0 DB1 DB2 DB3 DB6 DB7
-std::string VMEngine::getFlags(int level)
+std::string VMEngine::getFlags(int rights)
 {
         int eflags=0;
         err = uc_reg_read(uc, UC_X86_REG_EFLAGS, &eflags);
@@ -412,32 +423,32 @@ std::string VMEngine::getFlags(int level)
            log->append("Impossible de récupérer le registre: EFLAGS");
         std::stringstream out;
         out << "  CF:" << std::dec << ((eflags & 0x0001));
-        if (level > 8) 
+        if (rights > 8) 
             out << "  RF:" << std::dec << ((eflags & 0x00010000)>>16) << "\n";
         else
             out << "\n"; 
         out << "  PF:" << std::dec << ((eflags & 0x0004)>>2); 
-        if (level > 8)
+        if (rights > 8)
             out << "  VM:" << std::dec << ((eflags & 0x00020000)>>17) << "\n";
         else
             out << "\n";
         out << "  AF:" << std::dec << ((eflags & 0x0010)>>4);    
-        if (level > 8)
+        if (rights > 8)
             out << "  AC:" << std::dec << ((eflags & 0x00040000)>>18) << "\n";
         else
             out << "\n";
         out << "  ZF:" << std::dec << ((eflags & 0x0040)>>6);
-        if (level > 8)
+        if (rights > 8)
             out << " VIF:" << std::dec << ((eflags & 0x00080000)>>19) << "\n";
         else
             out << "\n";
         out << "  SF:" << std::dec << ((eflags & 0x0080)>>7);
-        if (level > 8)
+        if (rights > 8)
             out << " VIP:" << std::dec << ((eflags & 0x00100000)>>20) << "\n";      
         else
             out << "\n";
         out << "  TF:" << std::dec << ((eflags & 0x0100)>>8);
-        if (level > 8)
+        if (rights > 8)
             out << "  ID:" << std::dec << ((eflags & 0x00200000)>>21) << "\n";
         else
             out << "\n";
@@ -449,7 +460,7 @@ std::string VMEngine::getFlags(int level)
         return out.str();    
 }
 
-std::string VMEngine::getRegs(int level)
+std::string VMEngine::getRegs(int rights)
 {
     int regsi836[] = {
         UC_X86_REG_EAX, UC_X86_REG_EBX, UC_X86_REG_ECX, UC_X86_REG_EDX, 
@@ -469,78 +480,78 @@ std::string VMEngine::getRegs(int level)
         return "";
     }
     std::stringstream out;
-    if (level > 8)
+    if (rights > 8)
         out << "EAX:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[0] << " | ";
-    if (level > 1)
+    if (rights > 1)
         out << "AX:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[0] & 0x0000FFFF) << " | "; 
-    if (level > 1)
+    if (rights > 1)
         out << "AH:" << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << ((vals[0] & 0xFF00) >> 8) << " | "; 
     out << "AL:" << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << (vals[0] & 0xFF) << "\n"; 
 
-    if (level > 8)
+    if (rights > 8)
         out << "EBX:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[1] << " | ";
-    if (level > 2)
+    if (rights > 2)
         out << "BX:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[1] & 0x0000FFFF) << " | "; 
-    if (level > 2)
+    if (rights > 2)
         out << "BH:" << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << ((vals[1] & 0xFF00) >> 8) << " | "; 
-    if (level > 2)
+    if (rights > 2)
         out << "BL:" << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << (vals[1] & 0xFF) << "\n"; 
     
-    if (level > 8)
+    if (rights > 8)
         out << "ECX:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[2] << " | ";
-    if (level > 2)
+    if (rights > 2)
         out << "CX:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[2] & 0x0000FFFF) << " | "; 
-    if (level > 2)
+    if (rights > 2)
         out << "CH:" << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << ((vals[2] & 0xFF00) >> 8) << " | "; 
-    if (level > 2)
+    if (rights > 2)
         out << "CL:" << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << (vals[2] & 0xFF) << "\n"; 
     
-    if (level > 8)
+    if (rights > 8)
         out << "EDX:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[3] << " | ";
-    if (level > 2)
+    if (rights > 2)
         out << "DX:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[3] & 0x0000FFFF) << " | "; 
-    if (level > 2)
+    if (rights > 2)
         out << "DH:" << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << ((vals[3] & 0xFF00) >> 8) << " | "; 
-    if (level > 2)
+    if (rights > 2)
         out << "DL:" << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << (vals[3] & 0xFF) << "\n"; 
     
-    if (level > 8)
+    if (rights > 8)
         out << "ESI:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[4] << " | ";
-    if (level > 4)    
+    if (rights > 4)    
         out << "SI:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[4] & 0x0000FFFF) << "\n"; 
-    if (level > 8)
+    if (rights > 8)
         out << "EDI:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[5] << " | ";
-    if (level > 4)
+    if (rights > 4)
         out << "DI:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[5] & 0x0000FFFF) << "\n";
     
-    if (level > 8)
+    if (rights > 8)
         out << "EBP:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[6] << " | ";
-    if (level > 5)
+    if (rights > 5)
         out << "BP:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[6] & 0x0000FFFF) << "\n"; 
-    if (level > 8)
+    if (rights > 8)
         out << "ESP:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[7] << " | ";
-    if (level > 5)
+    if (rights > 5)
         out << "SP:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[7] & 0x0000FFFF) << "\n";
     
-    if (level > 6)
+    if (rights > 6)
         out << "CS:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[8] & 0x0000FFFF) << " | "; 
-    if (level > 6)
+    if (rights > 6)
         out << "DS:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[9] & 0x0000FFFF) << " | "; 
-    if (level > 6)
+    if (rights > 6)
         out << "ES:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[10] & 0x0000FFFF) << "\n"; 
-    if (level > 6)
+    if (rights > 6)
         out << "SS:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[11] & 0x0000FFFF) << " | "; 
-    if (level > 7)
+    if (rights > 7)
         out << "FS:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[12] & 0x0000FFFF) << " | ";
-    if (level > 7) 
+    if (rights > 7) 
         out << "GS:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[13] & 0x0000FFFF) << "\n"; 
     
-    if (level > 8)
+    if (rights > 8)
         out << "EIP:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[14] << " | ";
     out << "IP:" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << (vals[14] & 0x0000FFFF) << "\n";
     
-    if (level > 3)
-    if (level < 9)
+    if (rights > 3)
+    if (rights < 9)
         out << "FLAGS:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << (vals[15]  & 0xFFFF)<< ""; 
     else
         out << "EFLAGS:" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << vals[15] << ""; 
@@ -739,8 +750,9 @@ void Menu::initNow()
 void Menu::initCore()
 {
   addTimer (50);
-    log.append(scenario.title);
-  loadLevel();
+  log.append(scenario.title);
+  if (scenario.levels.size()>0)
+    loadLevel();
 }
 
 void Menu::initWindows()
@@ -809,13 +821,13 @@ void Menu::AdjustWindows()
   tuto.show();
   debug.show();
   scenar.show();
-  if (scenario.Levels[scenar.getselected()].level > 3)
+  if (scenario.levels[scenar.getselected()].rights > 3)
         flags.show();
-  if (scenario.Levels[scenar.getselected()].level > 5)
+  if (scenario.levels[scenar.getselected()].rights > 5)
         stack.show();
-  if (scenario.Levels[scenar.getselected()].level > 2)
+  if (scenario.levels[scenar.getselected()].rights > 2)
         mem.show();
-  if (scenario.Levels[scenar.getselected()].level > 6)
+  if (scenario.levels[scenar.getselected()].rights > 6)
         screen.show();              
 }
 
@@ -952,17 +964,17 @@ void Menu::onClose (finalcut::FCloseEvent* ev)
 
 void Menu::loadLevel()
 {
-  log.append("Chargement du scénario "+scenario.Levels[scenar.getselected()].title);
-  view.setText("Objectif: "+scenario.Levels[scenar.getselected()].title);
+  log.append("Chargement du scénario "+scenario.levels[scenar.getselected()].title);
+  view.setText("Objectif: "+scenario.levels[scenar.getselected()].title);
   view.clear();
-  view.append(scenario.Levels[scenar.getselected()].description);
+  view.append(scenario.levels[scenar.getselected()].description);
   tuto.clear();
-  tuto.append(scenario.Levels[scenar.getselected()].tutorial);
+  tuto.append(scenario.levels[scenar.getselected()].tutorial);
   regs.set("En attente d'initialisation...");
-  edit.set(scenario.Levels[scenar.getselected()].code);
+  edit.set(scenario.levels[scenar.getselected()].code);
   AdjustWindows();
   debug.clear();
-  vm.Configure(&scenario.Levels[scenar.getselected()].init,code);
+  vm.Configure(&scenario.levels[scenar.getselected()].init,code);
   end();
 }
 
@@ -973,7 +985,7 @@ void Menu::end()
 
 void Menu::compile()
 {
-  code=asmer.Assemble(edit.get(),scenario.Levels[scenar.getselected()].init.dump.regs.eip);
+  code=asmer.Assemble(edit.get(),scenario.levels[scenar.getselected()].init.dump.regs.eip);
   debug.set(unasmer.Desassemble(code));
 }
 
@@ -1006,7 +1018,7 @@ bool Menu::verify()
     return false;
   }
   if (!code->initialized)
-    vm.Prepare(&scenario.Levels[scenar.getselected()].init,code);
+    vm.Prepare(&scenario.levels[scenar.getselected()].init,code);
   if (!code->initialized)
     return false;
   return true;
@@ -1022,8 +1034,8 @@ void Menu::refresh()
   }
   else
   {
-    regs.set(vm.getRegs(scenario.Levels[scenar.getselected()].level));
-    flags.set(vm.getFlags(scenario.Levels[scenar.getselected()].level));
+    regs.set(vm.getRegs(scenario.levels[scenar.getselected()].rights));
+    flags.set(vm.getFlags(scenario.levels[scenar.getselected()].rights));
     //debug.setindex(vm.getEIP(code));  
   }
   if (!code->executed)

@@ -38,10 +38,7 @@ hlt",
                 },
                 "drapeaux" : 1
             },
-            "memoires" : 
-            {
-            
-            }
+            "code" : "ceci est le code"
         },
         "niveau_objectif" :
         {
