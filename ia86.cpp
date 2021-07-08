@@ -311,10 +311,11 @@ Desassembler::Desassembler(TextWindow *log) : log(log)
         log->append("Initialisation du désassembleur X86");
 }
 
-std::vector<std::array<std::string, 5>> Desassembler::Desassemble(Code *code)
+std::vector<std::array<std::string, 5>> Desassembler::Desassemble(uint8_t *content, uint32_t address,uint32_t size)
 {
+
     std::stringstream out;
-    srcsize=cs_disasm(handle, code->content, code->size, code->address, 0, &insn);
+    srcsize=cs_disasm(handle, content, size, address, 0, &insn);
     if (srcsize == 0)
         log->append("Erreur de désassemblage");
     else
@@ -352,12 +353,11 @@ Assembler::Assembler(TextWindow *log) : log(log)
     }
     else
         log->append("Initialisation de l'assembleur X86");
-    code->assembled=false;
 }
 
-MultiCode *Assembler::MultiAssemble(std::string source,uint32_t address)
+std::vector<Code> Assembler::MultiAssemble(std::string source,uint32_t address)
 {
-    MultiCode *mcode=new MultiCode;
+    std::vector<Code> mcode;
     std::istringstream stream(source);
     std::string line;
     std::regex regex("^ *.org 0x([0-F]+)$");
@@ -376,7 +376,7 @@ MultiCode *Assembler::MultiAssemble(std::string source,uint32_t address)
             }
             if (!begin)
             {
-                mcode->zones.push_back(*code);
+                mcode.push_back(*code);
                 code=new Code;
                 code->address=org;                
             }
@@ -388,16 +388,15 @@ MultiCode *Assembler::MultiAssemble(std::string source,uint32_t address)
         begin=false;
     }
     if (code->src.size()>0)
-        mcode->zones.push_back(*code);
-    for(size_t i=0;i<mcode->zones.size();i++)
+        mcode.push_back(*code);
+    for(size_t i=0;i<mcode.size();i++)
     {
-        log->append("Section N°"+std::to_string(i)+" : "+intToHexString(mcode->zones[i].address,8)+" -> "+to_string(mcode->zones[i].src.size())+" octets");
-        log->append(mcode->zones[i].src);
-        mcode->zones[i].assembled=false;
-        mcode->zones[i].initialized=false;
-        this->Assemble(&mcode->zones[i]);
+        log->append("Section N°"+std::to_string(i)+" : "+intToHexString(mcode[i].address,8)+" -> "+to_string(mcode[i].src.size())+" octets");
+        log->append(mcode[i].src);
+        mcode[i].assembled=false;
+        mcode[i].loaded=false;
+        this->Assemble(&mcode[i]);
     }
-    mcode->executed=false;
     return mcode;
 }
 
@@ -492,6 +491,11 @@ std::string VMEngine::getFlags(int rights)
         out << "IOPL:" << std::dec << ((eflags & 0x3000)>>12) << "\n";        
         out << "  NT:" << std::dec << ((eflags & 0x4000)>>13) << "\n";    
         return out.str();    
+}
+
+uint8_t *VMEngine::getRamRaw(uint32_t address, uint32_t size)
+{
+
 }
 
 std::string VMEngine::getRegs(int rights)
@@ -604,62 +608,93 @@ void VMEngine::Init()
         log->append("Initialisation de l'ordinateur IA86");
 }
 
+bool VMEngine::isExecuted()
+{
+    return this->executed;
+}
+
+bool VMEngine::isInitialized()
+{
+    return this->initialized;
+}
+
 void VMEngine::Close()
 {
    uc_close(uc);
 }
 
-void VMEngine::Halt(Code *code)
+void VMEngine::Halt()
 {
-   code->executed=false;
+   this->executed=false;
 }
 
-void VMEngine::Configure(State *init, Code *code)
+void VMEngine::Change()
 {
+   this->executed=false;
+   this->initialized=false;
+}
+
+void VMEngine::Configure(State *init, std::vector<Code> newmcode)
+{
+    int status;
+    mcode=newmcode;
     Close();
     Init();
-    code->assembled=false;
-    code->initialized=false;
-    code->executed=false;
+    this->initialized=false;
+    this->executed=false;
     log->append("Mappage de la mémoire virtuelle");
-    uc_mem_map(uc, init->dump.regs.eip, 1 * 1024 * 1024, UC_PROT_ALL);
+    uc_mem_map(uc, 0, 1 * 1024 * 1024, UC_PROT_ALL);
+    for(size_t i=0;i<mcode.size();i++)
+        SetMem(&mcode[i]);
+    status=verify();
+    if (status==0)
+        this->initialized=true;
+    else
+        this->initialized=false;
+    SetRegs(init);
 }
 
-void VMEngine::Prepare(State *init, Code *code)
+int VMEngine::verify()
 {
-    SetMem(init, code);
-    SetRegs(init, code);
+   for(Code code: mcode)
+   {
+      if (!code.assembled)
+        return 1;
+      else if (!code.loaded)
+         return 2;       
+   }
+   return 0;
 }
 
-int VMEngine::getEIP(Code *code)
+int VMEngine::getEIP()
 {
         int eip=-666;
         err = uc_reg_read(uc, UC_X86_REG_EIP, &eip);
         if (err != UC_ERR_OK)
            log->append("Impossible de récupérer le registre: EIP");
-        if ((eip<code->address) || (eip>code->address+code->size))
+        if ((eip<0) || (eip>1*1024*1024))
             eip=-666;
         return eip;
-        }
+}
 
-void VMEngine::SetMem(State *init, Code *code)
+void VMEngine::SetMem(Code *code)
 {
 
-        err = uc_mem_write(uc, init->dump.regs.eip, code->content, code->size);
+        err = uc_mem_write(uc, code->address, code->content, code->size);
         if (err) 
         {
-            code->initialized=false;
+            code->loaded=false;
             log->append("Erreur de copie mémoire dans la machine virtuelle");
             return;
         }
         else
         {
-            code->initialized=true;
+            code->loaded=true;
             log->append("Chargement en mémoire de la machine virtuelle, taille: "+to_string(code->size));
         }
 }
  
-void VMEngine::SetRegs(State *init, Code *code)
+void VMEngine::SetRegs(State *init)
 {
         std::stringstream out;
         out << "Configuration initiale de l'ordinateur IA86:\n  "; 
@@ -747,18 +782,18 @@ void VMEngine::SetRegs(State *init, Code *code)
         log->append(out.str());
 }
 
-void VMEngine::Run(Code *code,uint32_t start, uint32_t stop, uint64_t timeout)
+void VMEngine::Run(State *init,uint64_t timeout)
 {
-    err=uc_emu_start(uc, start, stop, timeout, 0);
+    err=uc_emu_start(uc, init->dump.regs.eip, 0xFFFF, timeout, 0);
     if (err) 
     {
         log->append("Erreur lors de l'exécution de la machine virtuelle");
-        code->executed=false;
+        this->executed=false;
         return;
     }
     else
     {
-        code->executed="true";
+        this->executed="true";
     }
 }
 
@@ -892,8 +927,6 @@ void Menu::initMenus()
   Breakpoint.setStatusbarMessage ("Enlève ou met un point d'arrêt"); 
   End.addAccelerator (FKey::F6);
   End.setStatusbarMessage ("Termine le programme et remet à zéro la machine IA86");
-  Init.addAccelerator (FKey::F3);
-  Init.setStatusbarMessage ("Initialise la machine IA86");
   About.setStatusbarMessage ("A propos de IA86"); 
 }
 
@@ -953,11 +986,6 @@ void Menu::initMenusCallBack()
     this,
     &Menu::about
   );
-  Init.addCallback (
-    "clicked",
-    this,
-    &Menu::verify
-  );
 }
 
 void Menu::initMisc()
@@ -1008,18 +1036,19 @@ void Menu::loadLevel()
   edit.set(scenario.levels[scenar.getselected()].code);
   AdjustWindows();
   debug.clear();
-  vm.Configure(&scenario.levels[scenar.getselected()].init,code);
-  end();
+  vm.Change();
 }
 
 void Menu::end()
 {
-  vm.Halt(code);
+  vm.Halt();
 }
 
 void Menu::compile()
 {
-  mcode=asmer.MultiAssemble(edit.get(),scenario.levels[scenar.getselected()].init.dump.regs.eip);
+    std::vector<Code> mcode;
+    mcode=asmer.MultiAssemble(edit.get(),scenario.levels[scenar.getselected()].init.dump.regs.eip);
+    vm.Configure(&scenario.levels[scenar.getselected()].init,mcode);
 }
 
 void Menu::about()
@@ -1043,23 +1072,9 @@ void Menu::about()
   AdjustWindows();
 }
 
-bool Menu::verify()
-{
-  if (!code->assembled)
-  {
-    finalcut::FMessageBox::error(this, "Vous devez compiler le source d'abord !");
-    return false;
-  }
-  if (!code->initialized)
-    vm.Prepare(&scenario.levels[scenar.getselected()].init,code);
-  if (!code->initialized)
-    return false;
-  return true;
-}
-
 void Menu::refresh()
 {
-  if (!code->initialized)
+  if (!vm.isInitialized())
   {
     regs.set("En attente d'initialisation...");
     flags.set("Attente...");  
@@ -1071,7 +1086,7 @@ void Menu::refresh()
     flags.set(vm.getFlags(scenario.levels[scenar.getselected()].rights));
     //debug.setindex(vm.getEIP(code));  
   }
-  if (!code->executed)
+  if (!vm.isExecuted())
   {
     finalcut::FApplication::setDarkTheme();
   }
@@ -1087,18 +1102,30 @@ void Menu::refresh()
 
 void Menu::exec()
 {
-  if (!verify()) return;
-  vm.Run(code,code->address,code->address+code->size,0);
+  if (!vm.isInitialized())
+    compile();
+  if (vm.verify()==1)
+  {
+    finalcut::FMessageBox::error(this, "Vous devez compiler le source d'abord !");
+    return;
+  }
+  else if (vm.verify()==2)
+  {
+    finalcut::FMessageBox::error(this, "Une erreur de chargement a eu lieu vers la VM !");
+    return;
+  }
+  else
+    vm.Run(&scenario.levels[scenar.getselected()].init,0);
 }
 
 void Menu::trace()
 {
-  if (!verify()) return; 
+  exec();
 }
 
 void Menu::step()
 {
-  if (!verify()) return;  
+  exec(); 
 }
 
 //----------------------------------------------------------------------

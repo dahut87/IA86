@@ -133,16 +133,8 @@ struct Code
         size_t size;
         uint8_t *content;
         bool assembled;
-        bool initialized;
-        bool executed;
+        bool loaded;
         std::string src;
-};
-
-struct MultiCode
-{
-    std::vector<Code> zones;
-    uint32_t entrypoint;
-    bool executed;
 };
 
 class ScenarioWindow final : public finalcut::FDialog
@@ -247,7 +239,7 @@ class Desassembler
 {
   public:
     Desassembler(TextWindow *log);
-    std::vector<std::array<std::string, 5>> Desassemble(Code *code);
+    std::vector<std::array<std::string, 5>> Desassemble(uint8_t *content, uint32_t address,uint32_t size);
   private:
     csh handle;
     cs_insn *insn;
@@ -265,32 +257,38 @@ class Assembler
   public:
     Assembler(TextWindow *log);
     void Assemble(Code *code);
-    MultiCode *MultiAssemble(std::string source,uint32_t address);
+    std::vector<Code> MultiAssemble(std::string source,uint32_t address);
   private:
     ks_engine *ks;
     ks_err err;
     int err2;
     TextWindow *log;
     TextEditWindow *edit;
-    Code *code = new Code;
 };
 
 class VMEngine
 {
   public:
     VMEngine(TextWindow *log);
-    void Configure(State *init,Code *code);
-    void Halt(Code *code);
-    void Run(Code *code, uint32_t start, uint32_t stop, uint64_t timeout);
-    std::string getFlags(int level);
-    std::string getRegs(int level);
-    void Prepare(State *init, Code *code);
-    void SetMem(State *init, Code *code);
-    void SetRegs(State *init, Code *code);
-    int getEIP(Code *code);
+    void Configure(State *init, std::vector<Code> mcode);
+    void Halt();
+    void Change();
+    void Run(State *init,uint64_t timeout);
+    std::string getFlags(int rights);
+    std::string getRegs(int rights);
+    void SetMem(Code *code);
+    void SetRegs(State *init);
+    uint8_t *getRamRaw(uint32_t address, uint32_t size);
+    int getEIP();
+    int verify();
+    bool isExecuted();
+    bool isInitialized();    
   private:
+    std::vector<Code> mcode;
     void Init();
     void Close();
+    bool executed=false;
+    bool initialized=false;
     uc_engine *uc;
     uc_err err;
     TextWindow *log;
@@ -311,8 +309,6 @@ class Menu final : public finalcut::FDialog
     void loadLevel();
     TextWindow               log{this};
   private:
-    MultiCode *mcode = new MultiCode();
-    Code *code=new Code();
     void onTimer (finalcut::FTimerEvent*) override;
     void refresh();
     void configureFileMenuItems();
@@ -326,7 +322,6 @@ class Menu final : public finalcut::FDialog
     void exec();
     void trace();
     void step();
-    bool verify();
     void about();
     void AdjustWindows();
     void initWindows();
@@ -348,7 +343,6 @@ class Menu final : public finalcut::FDialog
     finalcut::FMenuItem      Assemble{"&Compilation", &Tools};
     finalcut::FMenuItem      Rearange{"&Ordonne les fenêtres", &Tools};
     finalcut::FMenu          Debug{"&Déboguage", &Menubar};
-    finalcut::FMenuItem      Init{"&Initialiser", &Debug};
     finalcut::FMenuItem      Run{"&Exécuter", &Debug};
     finalcut::FMenuItem      End{"&Terminer", &Debug};
     finalcut::FMenuItem      TraceInto{"Pas à pas &détaillé", &Debug}; 
