@@ -45,6 +45,47 @@ hlt",
         
         
         } 
-    }  
+    },
+    {
+        "niveau_titre" : "Suite",          
+        "niveau_description" : "Il faut connaitre...",
+        "niveau_tutoriel" : "Ceci vous...",
+        "niveau_code" : "mov ax,0x545
+inc dx
+.org 0x9000
+pop db 'ceci est un test',0
+mov esi,0x44441234
+ .org 0x3002
+hlt",
+        "niveau_droits" : 10,
+        "niveau_initial" : 
+        {
+            "registres" : 
+            {
+                "segments" :
+                {
+                },
+                "généraux" : 
+                {
+                    "eax" : 0,
+                    "ebx" : 0,
+                    "ecx" : 0,
+                    "edx" : 0,
+                    "esi" : 0,
+                    "edi" : 0,
+                    "esp" : 0,
+                    "ebp" : 0,
+                    "eip" : 0
+                },
+                "drapeaux" : 1
+            },
+            "code" : "ceci est le code"
+        },
+        "niveau_objectif" :
+        {
+        
+        
+        } 
+    }   
   ]
 }

@@ -1,5 +1,6 @@
 #include <final/final.h>
 #include <unistd.h>
+#include <regex>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -82,7 +83,7 @@ ScenarioWindow::ScenarioWindow (finalcut::FWidget* parent)
   : finalcut::FDialog{parent}
 {
   ((Menu*)this->getParent())->log.append("Chargement des scénarios");
-  scenario=readscenario("./scenarios.txt");
+  scenario=readscenario("./scenarios.json");
   if (scenario.levels.size()==0) 
     finalcut::FMessageBox::error(this, "Impossible de charger le scénario par défaut !");
   listview.ignorePadding();
@@ -354,23 +355,59 @@ Assembler::Assembler(TextWindow *log) : log(log)
     code->assembled=false;
 }
 
-MultiCode *Assembler::Createzone(std::string source)
-{
-
-}
-
 MultiCode *Assembler::MultiAssemble(std::string source,uint32_t address)
 {
-
+    MultiCode *mcode=new MultiCode;
+    std::istringstream stream(source);
+    std::string line;
+    std::regex regex("^ *.org 0x([0-F]+)$");
+    Code *code=new Code;
+    bool begin=true;
+    int org=address;
+    code->address=org;
+    while (std::getline(stream, line)) 
+    {
+        if (line.find(".org") != std::string::npos)
+        {
+            std::smatch match;
+            if(std::regex_search(line, match, regex))
+            {
+                org=std::stoul(match.str(1), nullptr, 16);
+            }
+            if (!begin)
+            {
+                mcode->zones.push_back(*code);
+                code=new Code;
+                code->address=org;                
+            }
+        }    
+        else
+        {
+            code->src.append(line+"\n");
+        }
+        begin=false;
+    }
+    if (code->src.size()>0)
+        mcode->zones.push_back(*code);
+    for(size_t i=0;i<mcode->zones.size();i++)
+    {
+        log->append("Section N°"+std::to_string(i)+" : "+intToHexString(mcode->zones[i].address,8)+" -> "+to_string(mcode->zones[i].src.size())+" octets");
+        log->append(mcode->zones[i].src);
+        mcode->zones[i].assembled=false;
+        mcode->zones[i].initialized=false;
+        this->Assemble(&mcode->zones[i]);
+    }
+    mcode->executed=false;
+    return mcode;
 }
 
-Code *Assembler::Assemble(std::string source,uint32_t address)
+void Assembler::Assemble(Code *code)
 {
     std::stringstream out;
-    size_t srcsize=source.size();
+    size_t srcsize=code->src.size();
     unsigned char src_char[srcsize+1];
-    strcpy(reinterpret_cast<char*>(src_char), source.c_str());
-    err2=ks_asm(ks, reinterpret_cast<const char*>(src_char), address, &code->content, &code->size, &srcsize);
+    strcpy(reinterpret_cast<char*>(src_char), code->src.c_str());
+    err2=ks_asm(ks, reinterpret_cast<const char*>(src_char), code->address, &code->content, &code->size, &srcsize);
     if (err2 != KS_ERR_OK)
     {
         log->append("Erreur d'assemblage");
@@ -379,20 +416,17 @@ Code *Assembler::Assemble(std::string source,uint32_t address)
     }
     else
     {  
+        out.clear();
         out << "Assemblage réussi, taille du code :" << code->size;
         code->assembled=true;
-        log->append(out.str());
-        /*out.str("");
-        out.clear();
-        if (codesize < 30)
+        if (code->size < 30)
         {
-               out << "  ";
-               for (size_t count = 0; count < codesize; count++)
-                    out << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << (int)((uint8_t)code[count]) ;
+               out << "\n  ";
+               for (size_t count = 0; count < code->size; count++)
+                    out << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << (int)((uint8_t)code->content[count]) ;
                log->append(out.str());   
-        }*/
+        }
     }
-    return code;
 }
  
 //----------------------------------------------------------------------
@@ -985,8 +1019,7 @@ void Menu::end()
 
 void Menu::compile()
 {
-  code=asmer.Assemble(edit.get(),scenario.levels[scenar.getselected()].init.dump.regs.eip);
-  debug.set(unasmer.Desassemble(code));
+  mcode=asmer.MultiAssemble(edit.get(),scenario.levels[scenar.getselected()].init.dump.regs.eip);
 }
 
 void Menu::about()

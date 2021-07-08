@@ -135,7 +135,7 @@ struct Code
         bool assembled;
         bool initialized;
         bool executed;
-        std::string code;
+        std::string src;
 };
 
 struct MultiCode
@@ -264,10 +264,9 @@ class Assembler
 {
   public:
     Assembler(TextWindow *log);
-    Code *Assemble(std::string source,uint32_t address);
+    void Assemble(Code *code);
     MultiCode *MultiAssemble(std::string source,uint32_t address);
   private:
-    MultiCode *Createzone(std::string source);
     ks_engine *ks;
     ks_err err;
     int err2;
@@ -312,7 +311,8 @@ class Menu final : public finalcut::FDialog
     void loadLevel();
     TextWindow               log{this};
   private:
-    Code *code = new Code();
+    MultiCode *mcode = new MultiCode();
+    Code *code=new Code();
     void onTimer (finalcut::FTimerEvent*) override;
     void refresh();
     void configureFileMenuItems();
