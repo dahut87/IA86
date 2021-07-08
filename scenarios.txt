@@ -1,0 +1,53 @@
+{
+    "scenario_titre" : "Scénario de Nicolas H.",
+    "scenario_objectifs" :
+  [
+    {
+        "niveau_titre" : "Les bases...",          
+        "niveau_description" : "Il faut connaitre...",
+        "niveau_tutoriel" : "Ceci vous...",
+        "niveau_code" : "mov ax,0x545
+inc dx
+mov esi,0x44441234
+hlt",
+        "niveau_droits" : 10,
+        "niveau_initial" : 
+        {
+            "registres" : 
+            {
+                "segments" :
+                {
+                    "cs" : 0000,
+                    "ds" : 0000,
+                    "ss" : 0000,
+                    "es" : 0000,
+                    "fs" : 0000,
+                    "gs" : 0000
+                },
+                "généraux" : 
+                {
+                    "eax" : 0,
+                    "ebx" : 0,
+                    "ecx" : 0,
+                    "edx" : 0,
+                    "esi" : 0,
+                    "edi" : 0,
+                    "esp" : 0,
+                    "ebp" : 0,
+                    "eip" : 0
+                },
+                "drapeaux" : 1
+            },
+            "memoires" : 
+            {
+            
+            }
+        },
+        "niveau_objectif" :
+        {
+        
+        
+        } 
+    }  
+  ]
+}

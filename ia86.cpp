@@ -1,6 +1,7 @@
 #include <final/final.h>
 #include <unistd.h>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <sstream>
 #include <iomanip>
@@ -10,6 +11,7 @@
 #include <vector>
 #include "ia86.h"
 
+#include "struct_mapping/struct_mapping.h"
 
 //----------------------------------------------------------------------
 // Fonctions diverses
@@ -24,52 +26,53 @@ std::string intToHexString(int intValue, int size) {
     return hexStr;
 }
 
-//----------------------------------------------------------------------
-// Objectifs de jeux
-//----------------------------------------------------------------------
+void mapping()
+{
+    struct_mapping::reg(&Scenario::title, "scenario_titre");
+    struct_mapping::reg(&Scenario::Levels, "scenario_objectifs");
+    struct_mapping::reg(&Level::title, "niveau_titre");
+    struct_mapping::reg(&Level::description, "niveau_description");
+    struct_mapping::reg(&Level::tutorial, "niveau_tutoriel");
+    struct_mapping::reg(&Level::code, "niveau_code");
+    struct_mapping::reg(&Level::level, "niveau_droits");
+    struct_mapping::reg(&Level::init, "niveau_initial");
+    struct_mapping::reg(&Level::goal, "niveau_objectif");
+    struct_mapping::reg(&State::dump, "registres");
+    struct_mapping::reg(&State::memzone, "memoires");
+    struct_mapping::reg(&i386_all_regs::segs, "segments");
+    struct_mapping::reg(&i386_all_regs::regs, "généraux");
+    struct_mapping::reg(&i386_all_regs::flags, "drapeaux");
+    struct_mapping::reg(&i386_segs::cs, "cs");
+    struct_mapping::reg(&i386_segs::ss, "ss");
+    struct_mapping::reg(&i386_segs::ds, "ds");
+    struct_mapping::reg(&i386_segs::es, "es");
+    struct_mapping::reg(&i386_segs::fs, "fs");
+    struct_mapping::reg(&i386_segs::gs, "gs");
+    struct_mapping::reg(&i386_regs::eax, "eax");
+    struct_mapping::reg(&i386_regs::ebx, "ebx");
+    struct_mapping::reg(&i386_regs::ecx, "ecx");
+    struct_mapping::reg(&i386_regs::edx, "edx");
+    struct_mapping::reg(&i386_regs::esi, "esi");
+    struct_mapping::reg(&i386_regs::edi, "edi");
+    struct_mapping::reg(&i386_regs::esp, "esp");
+    struct_mapping::reg(&i386_regs::ebp, "ebp");
+    struct_mapping::reg(&i386_regs::eip, "eip"); 
+}
 
-    // Ordre des registres ... IP DI SI BP SP BX DX CX AX
-Goal goals[]=
-{ 
-    {
-      "L'instruction MOV","Le but est de bouger du registre AX au registre BX, l' ensemble des données", "Aide....", "inc ax\ndec cx\nmov ax,0x33\nadd dx,[bx+2]\nmov cx,12", 1,
-      {
-         {
-            {},                       
-            {.bx=0x0002,.ax=0x1920}, 
-            0x00000000 
-         },
-         {}
-      },
-      {
-         {
-            {},                       
-            {.bx=25,.dx=0b101,.cx=0x4650, .ax=0xCCDD}, 
-            0x00000000 
-         },
-         {}
-       }
-    },
-    {
-      "Les registres","Il est important de...", "Aide....", "add cl,2\nmov si,0X1234", 2,
-      {
-         {
-            {},                       
-            {.bx=0x0002,.ax=0x1920}, 
-            0x00000000 
-         },
-         {}
-      },
-      {
-         {
-            {},                       
-            {.bx=25,.dx=0b101,.cx=0x4650, .ax=0xCCDD}, 
-            0x00000000 
-         },
-         {}
-       }
-    }
-};
+Scenario readscenario(std::string filename) {
+   
+    std::ifstream inFile;
+    inFile.open(filename);
+    std::stringstream strStream;
+    strStream << inFile.rdbuf();
+    std::string json=strStream.str();
+    std::istringstream json_data(json);
+    Scenario scenar;
+    struct_mapping::map_json_to_struct(scenar, json_data);
+    return scenar;
+}
+
+Scenario scenario;
 
 //----------------------------------------------------------------------
 // Classe ScenarioWindow
@@ -78,22 +81,18 @@ Goal goals[]=
 ScenarioWindow::ScenarioWindow (finalcut::FWidget* parent)
   : finalcut::FDialog{parent}
 {
-
+  scenario=readscenario("./scenarios.txt");
   listview.ignorePadding();
-  listview.addColumn ("Niv");
+  listview.addColumn ("*");
   listview.addColumn ("Intitulé");  
-  listview.addColumn ("Difficulté");
-  listview.addColumn ("Cycles");
-  listview.addColumn ("Taille");
   listview.hideSortIndicator(true);
   listview.setFocus();
   std::vector<std::string> items;
-  for(size_t i=0; i < (sizeof(goals)/sizeof(goals[0])); i++)
+  for(size_t i=0; i < (sizeof(scenario.Levels)/sizeof(scenario.Levels[0])); i++)
   {
     items.clear();
     items.push_back(to_string(i));
-    items.push_back(goals[i].title);
-    items.push_back(to_string(goals[i].level));
+    items.push_back(scenario.Levels[i].title);
     const finalcut::FStringList line (items.begin(), items.end());    
     listview.insert (line);
   }
@@ -109,7 +108,7 @@ void ScenarioWindow::click()
     const auto& item = listview.getCurrentItem();
     std::string temp=item->getText(1).toString();
     selected=stoi(temp);
-    ((Menu*)this->getParent())->loadGoal();
+    ((Menu*)this->getParent())->loadLevel();
 }
 
 int ScenarioWindow::getselected()
@@ -120,7 +119,6 @@ int ScenarioWindow::getselected()
 void ScenarioWindow::initLayout()
 {
   listview.setGeometry (FPoint{1, 2}, FSize{getWidth(), getHeight() - 1});
-  setMinimumSize (FSize{51, 6});
   FDialog::initLayout();
 }
 
@@ -406,6 +404,50 @@ VMEngine::VMEngine(TextWindow *log) : log(log)
 // Level 10 : EIP EAX EBX ECX EDX EFLAGS ESI EDI ESP EBP CS DS ES SS FS GS ST0 ST1 ST2 ST3 ST4 ST5 ST6 ST7
 // Level 11 : EIP EAX EBX ECX EDX EFLAGS ESI EDI ESP EBP CS DS ES SS FS GS ST0 ST1 ST2 ST3 ST4 ST5 ST6 ST7 CR0 CR2 CR3 CR4 CR8 
 // Level 12 : EIP EAX EBX ECX EDX EFLAGS ESI EDI ESP EBP CS DS ES SS FS GS ST0 ST1 ST2 ST3 ST4 ST5 ST6 ST7 CR0 CR2 CR3 CR4 CR8 DB0 DB1 DB2 DB3 DB6 DB7
+std::string VMEngine::getFlags(int level)
+{
+        int eflags=0;
+        err = uc_reg_read(uc, UC_X86_REG_EFLAGS, &eflags);
+        if (err != UC_ERR_OK)
+           log->append("Impossible de récupérer le registre: EFLAGS");
+        std::stringstream out;
+        out << "  CF:" << std::dec << ((eflags & 0x0001));
+        if (level > 8) 
+            out << "  RF:" << std::dec << ((eflags & 0x00010000)>>16) << "\n";
+        else
+            out << "\n"; 
+        out << "  PF:" << std::dec << ((eflags & 0x0004)>>2); 
+        if (level > 8)
+            out << "  VM:" << std::dec << ((eflags & 0x00020000)>>17) << "\n";
+        else
+            out << "\n";
+        out << "  AF:" << std::dec << ((eflags & 0x0010)>>4);    
+        if (level > 8)
+            out << "  AC:" << std::dec << ((eflags & 0x00040000)>>18) << "\n";
+        else
+            out << "\n";
+        out << "  ZF:" << std::dec << ((eflags & 0x0040)>>6);
+        if (level > 8)
+            out << " VIF:" << std::dec << ((eflags & 0x00080000)>>19) << "\n";
+        else
+            out << "\n";
+        out << "  SF:" << std::dec << ((eflags & 0x0080)>>7);
+        if (level > 8)
+            out << " VIP:" << std::dec << ((eflags & 0x00100000)>>20) << "\n";      
+        else
+            out << "\n";
+        out << "  TF:" << std::dec << ((eflags & 0x0100)>>8);
+        if (level > 8)
+            out << "  ID:" << std::dec << ((eflags & 0x00200000)>>21) << "\n";
+        else
+            out << "\n";
+        out << "  IF:" << std::dec << ((eflags & 0x0200)>>9) << "\n";        
+        out << "  DF:" << std::dec << ((eflags & 0x0400)>>10) << "\n";        
+        out << "  OF:" << std::dec << ((eflags & 0x0800)>>11) << "\n";        
+        out << "IOPL:" << std::dec << ((eflags & 0x3000)>>12) << "\n";        
+        out << "  NT:" << std::dec << ((eflags & 0x4000)>>13) << "\n";    
+        return out.str();    
+}
 
 std::string VMEngine::getRegs(int level)
 {
@@ -697,44 +739,34 @@ void Menu::initNow()
 void Menu::initCore()
 {
   addTimer (50);
-  loadGoal();
+    log.append(scenario.title);
+  loadLevel();
 }
 
 void Menu::initWindows()
 {
   log.setText ("Journaux");
-  log.setGeometry ( FPoint { 63, 45 }, FSize{60, 11} );
   log.setResizeable();
   log.show();
   edit.setText ("Code source");
-  edit.setGeometry ( FPoint { 01, 17 }, FSize{39, 27} );
   edit.setResizeable();
   edit.show();
   view.setText ("Objectif");
-  view.setGeometry ( FPoint { 01, 45 }, FSize{60, 11} );
   view.setResizeable();
   view.show();
   regs.setText ("Registres");
-  regs.setGeometry ( FPoint { 01, 01 }, FSize{40, 15} );
   regs.show();
   flags.setText ("Drapeaux");
-  flags.setGeometry ( FPoint { 60, 01 }, FSize{15, 15} );
   stack.setText ("Pile");
-  stack.setGeometry ( FPoint { 43, 01 }, FSize{15, 15} );
   mem.setText ("Mémoire");
-  mem.setGeometry ( FPoint { 77, 01 }, FSize{108, 15} );
   tuto.setText ("Guide");
-  tuto.setGeometry ( FPoint { 125, 45 }, FSize{60, 11} );
   tuto.setResizeable();
   tuto.show();
   screen.setText ("Ecran");
-  screen.setGeometry ( FPoint { 105, 18 }, FSize{80, 25} );
   debug.setText ("Instructions");
-  debug.setGeometry ( FPoint { 42, 17 }, FSize{60, 27} );
   debug.setResizeable();
   debug.show();
   scenar.setText ("Scénarios");
-  scenar.setGeometry ( FPoint { 187, 01 }, FSize{23, 55} );
   scenar.setResizeable();
   scenar.show();
 }
@@ -764,7 +796,7 @@ void Menu::AdjustWindows()
   tuto.setGeometry ( FPoint { 125, 45 }, FSize{60, 11} );
   screen.setGeometry ( FPoint { 105, 18 }, FSize{80, 25} );
   debug.setGeometry ( FPoint { 42, 17 }, FSize{60, 27} );
-  scenar.setGeometry ( FPoint { 187, 01 }, FSize{23, 55} );
+  scenar.setGeometry ( FPoint { 187, 01 }, FSize{25, 55} );
   this->hide();
   flags.hide();
   stack.hide();
@@ -777,13 +809,13 @@ void Menu::AdjustWindows()
   tuto.show();
   debug.show();
   scenar.show();
-  if (goals[scenar.getselected()].level > 3)
+  if (scenario.Levels[scenar.getselected()].level > 3)
         flags.show();
-  if (goals[scenar.getselected()].level > 5)
+  if (scenario.Levels[scenar.getselected()].level > 5)
         stack.show();
-  if (goals[scenar.getselected()].level > 2)
+  if (scenario.Levels[scenar.getselected()].level > 2)
         mem.show();
-  if (goals[scenar.getselected()].level > 6)
+  if (scenario.Levels[scenar.getselected()].level > 6)
         screen.show();              
 }
 
@@ -918,19 +950,19 @@ void Menu::onClose (finalcut::FCloseEvent* ev)
   finalcut::FApplication::closeConfirmationDialog (this, ev);
 }
 
-void Menu::loadGoal()
+void Menu::loadLevel()
 {
-  log.append("Chargement du scénario "+goals[scenar.getselected()].title);
-  view.setText("Objectif: "+goals[scenar.getselected()].title);
+  log.append("Chargement du scénario "+scenario.Levels[scenar.getselected()].title);
+  view.setText("Objectif: "+scenario.Levels[scenar.getselected()].title);
   view.clear();
-  view.append(goals[scenar.getselected()].description);
+  view.append(scenario.Levels[scenar.getselected()].description);
   tuto.clear();
-  tuto.append(goals[scenar.getselected()].help);
+  tuto.append(scenario.Levels[scenar.getselected()].tutorial);
   regs.set("En attente d'initialisation...");
-  edit.set(goals[scenar.getselected()].code);
+  edit.set(scenario.Levels[scenar.getselected()].code);
   AdjustWindows();
   debug.clear();
-  vm.Configure(&goals[scenar.getselected()].init,code);
+  vm.Configure(&scenario.Levels[scenar.getselected()].init,code);
   end();
 }
 
@@ -941,7 +973,7 @@ void Menu::end()
 
 void Menu::compile()
 {
-  code=asmer.Assemble(edit.get(),goals[scenar.getselected()].init.dump.regs.eip);
+  code=asmer.Assemble(edit.get(),scenario.Levels[scenar.getselected()].init.dump.regs.eip);
   debug.set(unasmer.Desassemble(code));
 }
 
@@ -974,7 +1006,7 @@ bool Menu::verify()
     return false;
   }
   if (!code->initialized)
-    vm.Prepare(&goals[scenar.getselected()].init,code);
+    vm.Prepare(&scenario.Levels[scenar.getselected()].init,code);
   if (!code->initialized)
     return false;
   return true;
@@ -984,13 +1016,15 @@ void Menu::refresh()
 {
   if (!code->initialized)
   {
-    regs.set("En attente d'initialisation...");  
-    debug.setindex(-666);  
+    regs.set("En attente d'initialisation...");
+    flags.set("Attente...");  
+    //debug.setindex(-666);  
   }
   else
   {
-    regs.set(vm.getRegs(goals[scenar.getselected()].level));
-    debug.setindex(vm.getEIP(code));  
+    regs.set(vm.getRegs(scenario.Levels[scenar.getselected()].level));
+    flags.set(vm.getFlags(scenario.Levels[scenar.getselected()].level));
+    //debug.setindex(vm.getEIP(code));  
   }
   if (!code->executed)
   {
@@ -1027,7 +1061,7 @@ void Menu::step()
 //----------------------------------------------------------------------
 int main (int argc, char* argv[])
 {
-                   
+  mapping();
   finalcut::FApplication app {argc, argv};
   Menu main_dlg {&app};
   main_dlg.setText ("IA86");

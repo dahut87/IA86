@@ -90,7 +90,7 @@ using finalcut::FSize;
          };
  } __attribute__ (( packed ));
  
- struct i386_seg_regs 
+ struct i386_segs 
  {
          uint16_t cs;
          uint16_t ss;
@@ -102,46 +102,46 @@ using finalcut::FSize;
  
  struct i386_all_regs 
  {
-         struct i386_seg_regs segs;
+         struct i386_segs segs;
          struct i386_regs regs;
          uint32_t flags;
  } __attribute__ (( packed ));
  
     
-class Memzone
+struct Memzone
 {
-    public:
         uint32_t address;
         uint32_t size;
+        std::string code;
         uint8_t *content;
 };
 
-class State {
-    public:
+struct State {
         i386_all_regs dump;
         std::vector<Memzone> memzone;
 };
     
-class Goal {
-    public:
+struct Level {
         std::string title;
         std::string description;
-        std::string help;
+        std::string tutorial;
         std::string code;  
         int level;      
         State init;
         State goal;        
 };
 
-class Code
+struct Scenario {
+    std::string title;
+    std::vector<Level> Levels;
+};
+
+struct Code
 {
-    public:
-        uint32_t address;
-        size_t size;
-        unsigned char *content;
-        bool assembled;
-        bool initialized;
-        bool executed;
+    std::vector<Memzone> memzones;
+    bool assembled;
+    bool initialized;
+    bool executed;
 };
 
 class ScenarioWindow final : public finalcut::FDialog
@@ -280,6 +280,7 @@ class VMEngine
     void Configure(State *init,Code *code);
     void Halt(Code *code);
     void Run(Code *code, uint32_t start, uint32_t stop, uint64_t timeout);
+    std::string getFlags(int level);
     std::string getRegs(int level);
     void Prepare(State *init, Code *code);
     void SetMem(State *init, Code *code);
@@ -305,7 +306,7 @@ class Menu final : public finalcut::FDialog
     // Disable copy assignment operator (=)
     Menu& operator = (const Menu&) = delete;
      // Methods
-    void loadGoal();
+    void loadLevel();
   private:
     Code *code = new Code();
     void onTimer (finalcut::FTimerEvent*) override;

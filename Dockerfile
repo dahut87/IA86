@@ -1,21 +1,16 @@
-FROM alpine:3.12.0
+FROM alpine:3.13.0
  
 ENV UNICORN_VER  1.0.3
 ENV CAPSTONE_VER 4.0.2
 ENV KEYSTONE_VER 0.9.2
 
-RUN echo "http://alpine.42.fr/v3.12/main" > /etc/apk/repositories
-RUN echo "http://alpine.42.fr/v3.12/community" >> /etc/apk/repositories
+RUN echo "http://alpine.42.fr/v3.13/main" > /etc/apk/repositories
+RUN echo "http://alpine.42.fr/v3.13/community" >> /etc/apk/repositories
 RUN apk --no-cache update
 RUN apk --no-cache upgrade
 RUN apk --no-cache add bash util-linux coreutils curl make cmake gcc g++ libstdc++ libgcc zlib-dev \
 		       git sed tar wget gzip indent binutils hexdump dos2unix xxd autoconf automake autoconf-archive\ 
                        libtool linux-headers ncurses-dev
-WORKDIR /usr/src/
-RUN git clone https://github.com/dahut87/finalcut.git
-WORKDIR /usr/src/finalcut
-RUN autoreconf --install --force && ./configure --prefix=/usr && make && make install
-
 WORKDIR /usr/src
 RUN wget https://github.com/unicorn-engine/unicorn/archive/${UNICORN_VER}.tar.gz && tar -xzf ${UNICORN_VER}.tar.gz
 WORKDIR /usr/src/unicorn-${UNICORN_VER}
@@ -37,6 +32,18 @@ WORKDIR /usr/src
 RUN wget https://github.com/aquynh/capstone/archive/${CAPSTONE_VER}.tar.gz && tar -xzf ${CAPSTONE_VER}.tar.gz
 WORKDIR /usr/src/capstone-${CAPSTONE_VER}
 RUN CAPSTONE_ARCHS="x86" CAPTONE_X86_REDUCE="yes" ./make.sh && CAPSTONE_ARCHS="x86" CAPTONE_X86_REDUCE="yes" ./make.sh install
+
+WORKDIR /usr/src
+RUN git clone https://github.com/bk192077/struct_mapping.git
+WORKDIR /usr/src/struct_mapping
+RUN mkdir build
+WORKDIR /usr/src/struct_mapping/build
+RUN cmake .. && cmake --build . && cmake --install .
+
+WORKDIR /usr/src/
+RUN git clone https://github.com/dahut87/finalcut.git
+WORKDIR /usr/src/finalcut
+RUN autoreconf --install --force && ./configure --prefix=/usr && make && make install
 
 RUN adduser -D -H -u 502 utilisateur
 RUN adduser -D -H -u 1000 utilisateurs
