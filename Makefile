@@ -1,5 +1,5 @@
 CC=g++ -O2
-LFLAGS=-lfinal -lkeystone -lstdc++ -lm -lcapstone -lunicorn
+LFLAGS=-lfinal -lkeystone -lstdc++ -lm -lcapstone -lunicorn -lz
 OPTIONS=-std=c++17
 DOCKER=docker run -it -e COLUMNS="$$(tput cols)" -e LINES="$$(tput lines)" --name maker --rm -v $$(pwd):/data maker
 XTERM=terminator -f -e 

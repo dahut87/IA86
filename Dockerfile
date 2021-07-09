@@ -45,6 +45,8 @@ RUN git clone https://github.com/dahut87/finalcut.git
 WORKDIR /usr/src/finalcut
 RUN autoreconf --install --force && ./configure --prefix=/usr && make && make install
 
+RUN apk --no-cache add zlib-dev
+
 RUN adduser -D -H -u 502 utilisateur
 RUN adduser -D -H -u 1000 utilisateurs
 RUN mkdir /data

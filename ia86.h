@@ -309,6 +309,9 @@ class Menu final : public finalcut::FDialog
     void loadLevel();
     TextWindow               log{this};
   private:
+    int eip,oldeip;
+    uint8_t *code;
+    uLong crc,oldcrc;
     void onTimer (finalcut::FTimerEvent*) override;
     void refresh();
     void configureFileMenuItems();

@@ -10,6 +10,7 @@
 #include <unicorn/unicorn.h>
 #include <capstone/capstone.h>
 #include <vector>
+#include <zlib.h>
 #include "ia86.h"
 
 #include "struct_mapping/struct_mapping.h"
@@ -495,7 +496,14 @@ std::string VMEngine::getFlags(int rights)
 
 uint8_t *VMEngine::getRamRaw(uint32_t address, uint32_t size)
 {
-
+        uint8_t *code=new uint8_t[512];
+        err = uc_mem_read(uc, address, code, size);
+        if (err) 
+        {
+            log->append("Erreur de copie mémoire depuis la machine virtuelle");
+            return NULL;
+        }
+        return code;
 }
 
 std::string VMEngine::getRegs(int rights)
@@ -1084,7 +1092,7 @@ void Menu::refresh()
   {
     regs.set(vm.getRegs(scenario.levels[scenar.getselected()].rights));
     flags.set(vm.getFlags(scenario.levels[scenar.getselected()].rights));
-    //debug.setindex(vm.getEIP(code));  
+    //debug.setindex(vm.getEIP(code));
   }
   if (!vm.isExecuted())
   {
@@ -1093,6 +1101,16 @@ void Menu::refresh()
   else
   {
     finalcut::FApplication::setDefaultTheme();
+    eip=vm.getEIP()-256;
+    if (eip<0) eip=0x00000000;
+    code=vm.getRamRaw(eip, 512);
+    crc = crc32(0,  code, 512);
+    if (crc != oldcrc || eip != oldeip)
+    {
+        debug.set(unasmer.Desassemble(code, eip,512));
+        oldcrc=crc;
+        oldeip=eip;
+    }
   }
   auto root_widget = getRootWidget();
   root_widget->resetColors();
