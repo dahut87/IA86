@@ -137,6 +137,12 @@ struct Code
         std::string src;
 };
 
+struct Unasm
+{
+    std::vector<std::array<std::string, 5>> src;
+    std::vector<std::array<int, 2>> pos;
+};
+
 class ScenarioWindow final : public finalcut::FDialog
 {
   public:
@@ -175,7 +181,8 @@ class InstructionWindow final : public finalcut::FDialog
     std::vector<std::array<std::string, 5>> get();
     void set(std::vector<std::array<std::string, 5>> src);
     void clear();
-    void setindex(int index);
+    void setmark(int index);
+    int getsize();
   private:
     // Method
     std::vector<std::array<std::string, 5>> content;
@@ -239,7 +246,7 @@ class Desassembler
 {
   public:
     Desassembler(TextWindow *log);
-    std::vector<std::array<std::string, 5>> Desassemble(uint8_t *content, uint32_t address,uint32_t size);
+    Unasm *Desassemble(uint8_t *content, uint32_t address,uint32_t size);
   private:
     csh handle;
     cs_insn *insn;
@@ -270,28 +277,38 @@ class VMEngine
 {
   public:
     VMEngine(TextWindow *log);
-    void Configure(State *init, std::vector<Code> mcode);
+    void Configure(State *init, std::string code);
     void Halt();
-    void Change();
+    void Unconfigure();
     void Run(State *init,uint64_t timeout);
-    std::string getFlags(int rights);
-    std::string getRegs(int rights);
+    std::string getFlags();
+    std::string getRegs();
+    std::vector<std::array<std::string, 5>> getInstr(int address,int size);
     void SetMem(Code *code);
     void SetRegs(State *init);
-    uint8_t *getRamRaw(uint32_t address, uint32_t size);
-    int getEIP();
     int verify();
     bool isExecuted();
-    bool isInitialized();    
+    bool isInitialized();
+    void setRights(int rights);
+    int getEIP();
+    int getCS();
+    int getDS();
   private:
+    TextWindow *log;
+    Assembler asmer{log};
+    Desassembler unasmer{log};
     std::vector<Code> mcode;
+    int rights;
+    uint8_t *getRamRaw(uint32_t address, uint32_t size);
     void Init();
     void Close();
     bool executed=false;
     bool initialized=false;
     uc_engine *uc;
     uc_err err;
-    TextWindow *log;
+    int alladdress,alladdress_old;
+    uint8_t *code;
+    uLong crc,crc_old;
 };
 
 class Menu final : public finalcut::FDialog
@@ -309,9 +326,6 @@ class Menu final : public finalcut::FDialog
     void loadLevel();
     TextWindow               log{this};
   private:
-    int eip,oldeip;
-    uint8_t *code;
-    uLong crc,oldcrc;
     void onTimer (finalcut::FTimerEvent*) override;
     void refresh();
     void configureFileMenuItems();
@@ -367,8 +381,6 @@ class Menu final : public finalcut::FDialog
     TextEditWindow           edit{this};
     ScenarioWindow           scenar{this};
     VMEngine                 vm{&log};
-    Assembler                asmer{&log};
-    Desassembler             unasmer{&log};
 };
 
 

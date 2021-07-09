@@ -162,10 +162,16 @@ void InstructionWindow::clear()
   listview.redraw();
 }
 
-void InstructionWindow::setindex(int index)
+void InstructionWindow::setmark(int index)
 {
-  listview.setindex(index);
+  listview.setmark(index);
 }
+
+int InstructionWindow::getsize()
+{
+  return listview.getCount();
+}
+
 
 void InstructionWindow::set(std::vector<std::array<std::string, 5>> src)
 {
@@ -312,9 +318,9 @@ Desassembler::Desassembler(TextWindow *log) : log(log)
         log->append("Initialisation du désassembleur X86");
 }
 
-std::vector<std::array<std::string, 5>> Desassembler::Desassemble(uint8_t *content, uint32_t address,uint32_t size)
+Unasm *Desassembler::Desassemble(uint8_t *content, uint32_t address,uint32_t size)
 {
-
+    Unasm *unasm=new Unasm;
     std::stringstream out;
     srcsize=cs_disasm(handle, content, size, address, 0, &insn);
     if (srcsize == 0)
@@ -323,7 +329,7 @@ std::vector<std::array<std::string, 5>> Desassembler::Desassemble(uint8_t *conte
     {  
         out << "Désassemblage réussi, taille du source :" << srcsize;
         log->append(out.str());
-        src.clear();
+        unasm->src.clear();
 		for (size_t j = 0; j < srcsize; j++)
 		{
 		    std::string *bytes = new std::string("");
@@ -333,11 +339,13 @@ std::vector<std::array<std::string, 5>> Desassembler::Desassemble(uint8_t *conte
 		    std::string *menmonic = new std::string((char *)insn[j].mnemonic);
 		    std::string *op_str = new std::string((char *)insn[j].op_str);
 		    std::array<std::string, 5> *array = new  std::array<std::string, 5>{"", adresse, *bytes, *menmonic, *op_str};
-		    src.push_back(*array);
+		    unasm->src.push_back(*array);
+		    std::array<int, 2> *array2 = new  std::array<int, 2>{(int)insn[j].address,(int)insn[j].size};
+		    unasm->pos.push_back(*array2);
         }
 		cs_free(insn, srcsize);
     }
-    return src;
+    return unasm;
 }
 
 //----------------------------------------------------------------------
@@ -354,6 +362,7 @@ Assembler::Assembler(TextWindow *log) : log(log)
     }
     else
         log->append("Initialisation de l'assembleur X86");
+    ks_option(ks, KS_OPT_SYNTAX, KS_OPT_SYNTAX_NASM);
 }
 
 std::vector<Code> Assembler::MultiAssemble(std::string source,uint32_t address)
@@ -449,7 +458,7 @@ VMEngine::VMEngine(TextWindow *log) : log(log)
 // Level 10 : EIP EAX EBX ECX EDX EFLAGS ESI EDI ESP EBP CS DS ES SS FS GS ST0 ST1 ST2 ST3 ST4 ST5 ST6 ST7
 // Level 11 : EIP EAX EBX ECX EDX EFLAGS ESI EDI ESP EBP CS DS ES SS FS GS ST0 ST1 ST2 ST3 ST4 ST5 ST6 ST7 CR0 CR2 CR3 CR4 CR8 
 // Level 12 : EIP EAX EBX ECX EDX EFLAGS ESI EDI ESP EBP CS DS ES SS FS GS ST0 ST1 ST2 ST3 ST4 ST5 ST6 ST7 CR0 CR2 CR3 CR4 CR8 DB0 DB1 DB2 DB3 DB6 DB7
-std::string VMEngine::getFlags(int rights)
+std::string VMEngine::getFlags()
 {
         int eflags=0;
         err = uc_reg_read(uc, UC_X86_REG_EFLAGS, &eflags);
@@ -506,7 +515,7 @@ uint8_t *VMEngine::getRamRaw(uint32_t address, uint32_t size)
         return code;
 }
 
-std::string VMEngine::getRegs(int rights)
+std::string VMEngine::getRegs()
 {
     int regsi836[] = {
         UC_X86_REG_EAX, UC_X86_REG_EBX, UC_X86_REG_ECX, UC_X86_REG_EDX, 
@@ -636,16 +645,34 @@ void VMEngine::Halt()
    this->executed=false;
 }
 
-void VMEngine::Change()
+void VMEngine::Unconfigure()
 {
    this->executed=false;
    this->initialized=false;
 }
 
-void VMEngine::Configure(State *init, std::vector<Code> newmcode)
+std::vector<std::array<std::string, 5>> VMEngine::getInstr(int address,int size)
+{   
+    if (address<alladdress || address+6>alladdress+500)
+    {
+        int begin=address-30;
+        if (begin<0) begin=0x00000000;
+        code=this->getRamRaw(begin, 500);
+        alladdress=begin;
+    }
+    crc = crc32(0,  code, 500);
+    if (crc != crc_old)
+    {
+        unasmer.Desassemble(code, alladdress, 500);
+        crc_old=crc;
+    }
+}
+
+void VMEngine::Configure(State *init, std::string code)
 {
     int status;
-    mcode=newmcode;
+    mcode.clear();
+    mcode=asmer.MultiAssemble(code,init->dump.regs.eip);
     Close();
     Init();
     this->initialized=false;
@@ -674,6 +701,11 @@ int VMEngine::verify()
    return 0;
 }
 
+void VMEngine::setRights(int rights)
+{
+    this->rights=rights;
+}
+
 int VMEngine::getEIP()
 {
         int eip=-666;
@@ -683,6 +715,28 @@ int VMEngine::getEIP()
         if ((eip<0) || (eip>1*1024*1024))
             eip=-666;
         return eip;
+}
+
+int VMEngine::getCS()
+{
+        int cs=-666;
+        err = uc_reg_read(uc, UC_X86_REG_CS, &cs);
+        if (err != UC_ERR_OK)
+           log->append("Impossible de récupérer le registre: CS");
+        if (cs<0)
+            cs=0;
+        return cs;
+}
+
+int VMEngine::getDS()
+{
+        int ds=-666;
+        err = uc_reg_read(uc, UC_X86_REG_DS, &ds);
+        if (err != UC_ERR_OK)
+           log->append("Impossible de récupérer le registre: DS");
+        if (ds<0)
+            ds=0;
+        return ds;
 }
 
 void VMEngine::SetMem(Code *code)
@@ -804,6 +858,10 @@ void VMEngine::Run(State *init,uint64_t timeout)
         this->executed="true";
     }
 }
+
+//----------------------------------------------------------------------
+// Classe 
+//----------------------------------------------------------------------
 
 //----------------------------------------------------------------------
 // Classe Menu
@@ -968,7 +1026,7 @@ void Menu::initMenusCallBack()
   (
     "clicked",
     this,
-    &Menu::initWindows
+    &Menu::AdjustWindows
   );
   TraceInto.addCallback
   (
@@ -1044,7 +1102,8 @@ void Menu::loadLevel()
   edit.set(scenario.levels[scenar.getselected()].code);
   AdjustWindows();
   debug.clear();
-  vm.Change();
+  vm.Unconfigure();
+  vm.setRights(scenario.levels[scenar.getselected()].rights);
 }
 
 void Menu::end()
@@ -1054,9 +1113,7 @@ void Menu::end()
 
 void Menu::compile()
 {
-    std::vector<Code> mcode;
-    mcode=asmer.MultiAssemble(edit.get(),scenario.levels[scenar.getselected()].init.dump.regs.eip);
-    vm.Configure(&scenario.levels[scenar.getselected()].init,mcode);
+    vm.Configure(&scenario.levels[scenar.getselected()].init,edit.get());
 }
 
 void Menu::about()
@@ -1090,8 +1147,8 @@ void Menu::refresh()
   }
   else
   {
-    regs.set(vm.getRegs(scenario.levels[scenar.getselected()].rights));
-    flags.set(vm.getFlags(scenario.levels[scenar.getselected()].rights));
+    regs.set(vm.getRegs());
+    flags.set(vm.getFlags());
     //debug.setindex(vm.getEIP(code));
   }
   if (!vm.isExecuted())
@@ -1101,16 +1158,7 @@ void Menu::refresh()
   else
   {
     finalcut::FApplication::setDefaultTheme();
-    eip=vm.getEIP()-256;
-    if (eip<0) eip=0x00000000;
-    code=vm.getRamRaw(eip, 512);
-    crc = crc32(0,  code, 512);
-    if (crc != oldcrc || eip != oldeip)
-    {
-        debug.set(unasmer.Desassemble(code, eip,512));
-        oldcrc=crc;
-        oldeip=eip;
-    }
+    //debug.set(vm.getInstr(vm.getCS()*16+vm.getEIP(),debug.getsize()));
   }
   auto root_widget = getRootWidget();
   root_widget->resetColors();
