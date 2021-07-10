@@ -140,7 +140,7 @@ struct Code
 struct Unasm
 {
     std::vector<std::array<std::string, 5>> src;
-    std::vector<std::array<int, 2>> pos;
+    std::vector<uint32_t> pos;
 };
 
 class ScenarioWindow final : public finalcut::FDialog
@@ -246,7 +246,7 @@ class Desassembler
 {
   public:
     Desassembler(TextWindow *log);
-    Unasm *Desassemble(uint8_t *content, uint32_t address,uint32_t size);
+    void Desassemble(uint8_t *content, uint32_t address,uint32_t size, Unasm *unasm);
   private:
     csh handle;
     cs_insn *insn;
@@ -280,35 +280,38 @@ class VMEngine
     void Configure(State *init, std::string code);
     void Halt();
     void Unconfigure();
-    void Run(State *init,uint64_t timeout);
+    uint32_t getNextInstr();
+    uint32_t getCurrent();
+    void Run(uint32_t end,uint64_t timeout);
     std::string getFlags();
     std::string getRegs();
-    std::vector<std::array<std::string, 5>> getInstr(int address,int size);
+    std::vector<std::array<std::string, 5>>  getInstr(int segment, int address,int size);
     void SetMem(Code *code);
     void SetRegs(State *init);
     int verify();
     bool isExecuted();
     bool isInitialized();
     void setRights(int rights);
-    int getEIP();
-    int getCS();
-    int getDS();
+    int getLine();
+    uint32_t getEIP();
+    uint16_t getCS();
+    uint16_t getDS();
   private:
-    TextWindow *log;
-    Assembler asmer{log};
-    Desassembler unasmer{log};
-    std::vector<Code> mcode;
     int rights;
-    uint8_t *getRamRaw(uint32_t address, uint32_t size);
     void Init();
     void Close();
     bool executed=false;
     bool initialized=false;
     uc_engine *uc;
     uc_err err;
-    int alladdress,alladdress_old;
+    int bufferaddress=-555;
+    int address_old;
     uint8_t *code;
     uLong crc,crc_old;
+    std::vector<Code> mcode;
+    TextWindow *log;
+    Assembler asmer{log};
+    Desassembler unasmer{log};
 };
 
 class Menu final : public finalcut::FDialog
@@ -336,6 +339,7 @@ class Menu final : public finalcut::FDialog
     void initCore();
     void compile();
     void end();
+    void showInstr();
     void exec();
     void trace();
     void step();

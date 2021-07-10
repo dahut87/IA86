@@ -75,7 +75,8 @@ Scenario readscenario(std::string filename) {
 }
 
 Scenario scenario;
-
+Unasm unasm;
+int marker;
 //----------------------------------------------------------------------
 // Classe ScenarioWindow
 //----------------------------------------------------------------------
@@ -171,7 +172,6 @@ int InstructionWindow::getsize()
 {
   return listview.getCount();
 }
-
 
 void InstructionWindow::set(std::vector<std::array<std::string, 5>> src)
 {
@@ -308,28 +308,23 @@ void TextWindow::adjustSize()
 
 Desassembler::Desassembler(TextWindow *log) : log(log)
 {
-    std::stringstream out;
     err = cs_open(CS_ARCH_X86, CS_MODE_16, &handle);
-    if (err != CS_ERR_OK) {
-        out << "Erreur : Initialisation du désassembleur X86" << err;
-        log->append(out.str());
-    }
+    if (err != CS_ERR_OK) 
+        log->append("Erreur : Initialisation du désassembleur X86");
     else
         log->append("Initialisation du désassembleur X86");
 }
 
-Unasm *Desassembler::Desassemble(uint8_t *content, uint32_t address,uint32_t size)
+void Desassembler::Desassemble(uint8_t *content, uint32_t address,uint32_t size, Unasm *unasm)
 {
-    Unasm *unasm=new Unasm;
-    std::stringstream out;
     srcsize=cs_disasm(handle, content, size, address, 0, &insn);
     if (srcsize == 0)
         log->append("Erreur de désassemblage");
     else
     {  
-        out << "Désassemblage réussi, taille du source :" << srcsize;
-        log->append(out.str());
+        log->append("Désassemblage réussi, taille du source :"+to_string(srcsize));
         unasm->src.clear();
+        unasm->pos.clear();
 		for (size_t j = 0; j < srcsize; j++)
 		{
 		    std::string *bytes = new std::string("");
@@ -340,12 +335,10 @@ Unasm *Desassembler::Desassemble(uint8_t *content, uint32_t address,uint32_t siz
 		    std::string *op_str = new std::string((char *)insn[j].op_str);
 		    std::array<std::string, 5> *array = new  std::array<std::string, 5>{"", adresse, *bytes, *menmonic, *op_str};
 		    unasm->src.push_back(*array);
-		    std::array<int, 2> *array2 = new  std::array<int, 2>{(int)insn[j].address,(int)insn[j].size};
-		    unasm->pos.push_back(*array2);
+		    unasm->pos.push_back(insn[j].address);
         }
 		cs_free(insn, srcsize);
     }
-    return unasm;
 }
 
 //----------------------------------------------------------------------
@@ -444,6 +437,7 @@ void Assembler::Assemble(Code *code)
 
 VMEngine::VMEngine(TextWindow *log) : log(log)
 {
+    code=new uint8_t[500];
     Init();
 }
 // Level  1 : IP AL
@@ -501,18 +495,6 @@ std::string VMEngine::getFlags()
         out << "IOPL:" << std::dec << ((eflags & 0x3000)>>12) << "\n";        
         out << "  NT:" << std::dec << ((eflags & 0x4000)>>13) << "\n";    
         return out.str();    
-}
-
-uint8_t *VMEngine::getRamRaw(uint32_t address, uint32_t size)
-{
-        uint8_t *code=new uint8_t[512];
-        err = uc_mem_read(uc, address, code, size);
-        if (err) 
-        {
-            log->append("Erreur de copie mémoire depuis la machine virtuelle");
-            return NULL;
-        }
-        return code;
 }
 
 std::string VMEngine::getRegs()
@@ -651,21 +633,66 @@ void VMEngine::Unconfigure()
    this->initialized=false;
 }
 
-std::vector<std::array<std::string, 5>> VMEngine::getInstr(int address,int size)
-{   
-    if (address<alladdress || address+6>alladdress+500)
+uint32_t VMEngine::getNextInstr()
+{
+    uint32_t now=getEIP();
+    bool flag=false;
+    for(int pos: unasm.pos)
     {
-        int begin=address-30;
+       if (pos==now)
+          flag=true;
+       else if (flag)
+          return pos;
+    }
+    return 0;
+}
+
+std::vector<std::array<std::string, 5>> VMEngine::getInstr(int segment, int address,int size)
+{   
+    uint32_t realaddress=segment*16+address;
+    if (realaddress<bufferaddress || realaddress+6>bufferaddress+500)
+    {
+        int begin=realaddress-30;
         if (begin<0) begin=0x00000000;
-        code=this->getRamRaw(begin, 500);
-        alladdress=begin;
+        err = uc_mem_read(uc, begin, code, 500);
+        if (err) 
+        {
+            log->append("Erreur de copie mémoire depuis la machine virtuelle");
+        }
+        bufferaddress=begin;
     }
     crc = crc32(0,  code, 500);
     if (crc != crc_old)
     {
-        unasmer.Desassemble(code, alladdress, 500);
-        crc_old=crc;
+            unasmer.Desassemble(code, address, 500, &unasm);
+            crc_old=crc;
+    }    
+    int line=0;
+    for(int pos: unasm.pos)
+    {
+       if (pos==address)
+            break;
+       line++;
+    }  
+    int first=line-((int)size/2);
+    if (first<0) first=0;
+    int last=first+size;
+    marker=0;
+    std::string reference=intToHexString(address, 8);
+    std::vector<std::array<std::string, 5>> result = {unasm.src.begin()+first,unasm.src.begin()+last};
+    for(std::array<std::string, 5> item: result)
+    {
+        if (item[1]==reference)
+            break;
+        marker++;
     }
+    return result;
+}
+
+
+int VMEngine::getLine()
+{
+    return marker;
 }
 
 void VMEngine::Configure(State *init, std::string code)
@@ -706,36 +733,35 @@ void VMEngine::setRights(int rights)
     this->rights=rights;
 }
 
-int VMEngine::getEIP()
+uint32_t VMEngine::getCurrent()
 {
-        int eip=-666;
+    return getEIP()+getCS()*16;
+}
+
+uint32_t VMEngine::getEIP()
+{
+        int eip=0;
         err = uc_reg_read(uc, UC_X86_REG_EIP, &eip);
         if (err != UC_ERR_OK)
            log->append("Impossible de récupérer le registre: EIP");
-        if ((eip<0) || (eip>1*1024*1024))
-            eip=-666;
         return eip;
 }
 
-int VMEngine::getCS()
+uint16_t VMEngine::getCS()
 {
-        int cs=-666;
+        int cs=0;
         err = uc_reg_read(uc, UC_X86_REG_CS, &cs);
         if (err != UC_ERR_OK)
            log->append("Impossible de récupérer le registre: CS");
-        if (cs<0)
-            cs=0;
         return cs;
 }
 
-int VMEngine::getDS()
+uint16_t VMEngine::getDS()
 {
-        int ds=-666;
+        int ds=9;
         err = uc_reg_read(uc, UC_X86_REG_DS, &ds);
         if (err != UC_ERR_OK)
            log->append("Impossible de récupérer le registre: DS");
-        if (ds<0)
-            ds=0;
         return ds;
 }
 
@@ -844,9 +870,9 @@ void VMEngine::SetRegs(State *init)
         log->append(out.str());
 }
 
-void VMEngine::Run(State *init,uint64_t timeout)
+void VMEngine::Run(uint32_t end,uint64_t timeout)
 {
-    err=uc_emu_start(uc, init->dump.regs.eip, 0xFFFF, timeout, 0);
+    err=uc_emu_start(uc, this->getCurrent(), end, timeout, 0);
     if (err) 
     {
         log->append("Erreur lors de l'exécution de la machine virtuelle");
@@ -1114,6 +1140,7 @@ void Menu::end()
 void Menu::compile()
 {
     vm.Configure(&scenario.levels[scenar.getselected()].init,edit.get());
+    showInstr();
 }
 
 void Menu::about()
@@ -1137,19 +1164,23 @@ void Menu::about()
   AdjustWindows();
 }
 
+void Menu::showInstr()
+{
+    debug.set(vm.getInstr(vm.getCS(),vm.getEIP(),debug.getHeight()-3));
+    debug.setmark(vm.getLine());
+}
+
 void Menu::refresh()
 {
   if (!vm.isInitialized())
   {
     regs.set("En attente d'initialisation...");
-    flags.set("Attente...");  
-    //debug.setindex(-666);  
+    flags.set("Attente...");   
   }
   else
   {
     regs.set(vm.getRegs());
     flags.set(vm.getFlags());
-    //debug.setindex(vm.getEIP(code));
   }
   if (!vm.isExecuted())
   {
@@ -1158,7 +1189,6 @@ void Menu::refresh()
   else
   {
     finalcut::FApplication::setDefaultTheme();
-    //debug.set(vm.getInstr(vm.getCS()*16+vm.getEIP(),debug.getsize()));
   }
   auto root_widget = getRootWidget();
   root_widget->resetColors();
@@ -1181,17 +1211,46 @@ void Menu::exec()
     return;
   }
   else
-    vm.Run(&scenario.levels[scenar.getselected()].init,0);
+    vm.Run(0xFFFF,0);
+  showInstr();
 }
 
 void Menu::trace()
 {
-  exec();
+  if (!vm.isInitialized())
+    compile();
+  if (vm.verify()==1)
+  {
+    finalcut::FMessageBox::error(this, "Vous devez compiler le source d'abord !");
+    return;
+  }
+  else if (vm.verify()==2)
+  {
+    finalcut::FMessageBox::error(this, "Une erreur de chargement a eu lieu vers la VM !");
+    return;
+  }
+  else
+    vm.Run(vm.getNextInstr(),0);
+  showInstr();
 }
 
 void Menu::step()
 {
-  exec(); 
+  if (!vm.isInitialized())
+    compile();
+  if (vm.verify()==1)
+  {
+    finalcut::FMessageBox::error(this, "Vous devez compiler le source d'abord !");
+    return;
+  }
+  else if (vm.verify()==2)
+  {
+    finalcut::FMessageBox::error(this, "Une erreur de chargement a eu lieu vers la VM !");
+    return;
+  }
+  else
+    vm.Run(vm.getNextInstr(),0);
+  showInstr();
 }
 
 //----------------------------------------------------------------------
