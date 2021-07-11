@@ -309,6 +309,7 @@ class VMEngine
     std::vector<std::array<std::string, 5>>  getInstr(int segment, int address,int size);
     void SetMem(Code *code);
     void SetRegs(State *init);
+    std::string getRam(int segment, int address,int lines, int linesize);
     int verify();
     bool isExecuted();
     bool isInitialized();
@@ -385,6 +386,11 @@ class Menu final : public finalcut::FDialog
     finalcut::FMenuItem      Line2{&Game};
     finalcut::FMenuItem      Quit{"&Quitter", &Game};
     finalcut::FMenu          Options{"&Options", &Menubar};
+    //finalcut::FMenu          Memory{"&Mémoire", &Options};
+    //finalcut::FRadioMenuItem Ds_esi{"DS:ESI", &Memory};
+    //finalcut::FRadioMenuItem Es_edi{"ES:EDI", &Memory};
+    //finalcut::FRadioMenuItem Cs_eip{"CS:EIP", &Memory};
+    //finalcut::FRadioMenuItem Ss_sp{"SS:SP", &Memory};
     finalcut::FMenu          Tools{"&Outils", &Menubar};
     finalcut::FMenuItem      Assemble{"&Compilation", &Tools};
     finalcut::FMenuItem      Rearange{"&Ordonne les fenêtres", &Tools};

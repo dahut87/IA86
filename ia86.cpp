@@ -676,12 +676,41 @@ uint32_t VMEngine::getNextInstr()
     return 0;
 }
 
+std::string VMEngine::getRam(int segment, int address,int lines, int linesize)
+{   
+    int reallinesize=(int)((linesize-16)/4);
+    int size=reallinesize*(lines-3);
+    uint32_t realaddress=segment*16+address;
+    uint8_t *code=new uint8_t[512];
+    std::string result="";
+    std::string line;
+    err = uc_mem_read(uc, realaddress, code, 500);
+    if (err)
+        throw Error("VM IA86 - voir mémoire............................[ERREUR]");
+    for(size_t i=0;i<size;i++)
+    {
+        if ((i%reallinesize)==0)
+        {
+            if (i!=0) 
+                result+=" | "+line+"\n";
+            result+=intToHexString(address+i,8)+" | ";
+            line="";
+        }
+        result+=intToHexString(code[i],2)+" ";
+        if (std::isprint(code[i]))
+            line+=(char)code[i];
+        else
+            line+='.';
+    }
+    result+=" | "+line+"\n";
+    return result;
+}
+
 std::vector<std::array<std::string, 5>> VMEngine::getInstr(int segment, int address,int size)
 {   
     uint32_t realaddress=segment*16+address;
     if (realaddress<bufferaddress || realaddress+(size*7)>bufferaddress+500)
     {
-    log->append("read");
         bufferaddress=realaddress-30;
         if (bufferaddress<0) 
             bufferaddress=0x00000000;
@@ -695,7 +724,6 @@ std::vector<std::array<std::string, 5>> VMEngine::getInstr(int segment, int addr
     crc = crc32(0,  code, 500);
     if (crc != crc_old)
     {
-     log->append("unasm");
         unasmer.Desassemble(code, address_old, 500, &unasm);
         if (unasm.src.size()==0)
             throw Error("VM IA86 - cache instructions......................[ERREUR]");
@@ -945,10 +973,7 @@ void VMEngine::Run(uint32_t end,uint64_t timeout)
         {
             err=uc_emu_start(uc, this->getCurrent(), end, timeout, 0);
             if (err) 
-            {
-                this->Halt();
                 throw Error("VM IA86 - execution...............................[ERREUR]");
-            }
             else
             {
                 if (!this->executed)
@@ -959,6 +984,7 @@ void VMEngine::Run(uint32_t end,uint64_t timeout)
    }
    catch(exception const& e)
    {
+        this->Halt();
         log->append(e.what());
    }
 }
@@ -1288,6 +1314,7 @@ void Menu::showInstr()
         {
             debug.set(vm.getInstr(vm.getCS(),vm.getEIP(),debug.getHeight()-3));
             debug.setmark(vm.getLine());
+            mem.set(vm.getRam(vm.getDS(), 0x0000, mem.getHeight(),mem.getWidth()));
         }
     }
     catch(exception const& e)
@@ -1302,7 +1329,9 @@ void Menu::refresh()
   if (!vm.isInitialized())
   {
     regs.set("En attente d'initialisation...");
-    flags.set("Attente...");   
+    flags.set("Attente...");
+    stack.set("Attente...");
+    mem.set("En attente d'initialisation...");
   }
   else
   {

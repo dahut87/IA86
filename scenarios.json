@@ -56,14 +56,14 @@ mov es,ax
         "niveau_description" : "Il faut connaitre...",
         "niveau_tutoriel" : "Ceci vous...",
         "niveau_code" : "mov ax,0x545
-pop:
+_pour:
 inc dx
-lea ebx,[pop]
+lea ebx,[_pour]
 db 'c','e','c','i',' ','e','s','t',' ','u','n',' ','t','e','s','t',0
 .org 0x9000
-pop:
+_pour:
 db 0x00
-lea eax,[pop]
+lea eax,[_pour]
 mov esi,0x44441234
  .org 0x3002
 hlt",
