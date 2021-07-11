@@ -12,8 +12,10 @@
 #include <vector>
 #include <zlib.h>
 #include "ia86.h"
-
+#include <exception>
 #include "struct_mapping/struct_mapping.h"
+
+
 
 //----------------------------------------------------------------------
 // Fonctions diverses
@@ -77,6 +79,7 @@ Scenario readscenario(std::string filename) {
 Scenario scenario;
 Unasm unasm;
 int marker;
+bool debug=true;
 //----------------------------------------------------------------------
 // Classe ScenarioWindow
 //----------------------------------------------------------------------
@@ -84,30 +87,37 @@ int marker;
 ScenarioWindow::ScenarioWindow (finalcut::FWidget* parent)
   : finalcut::FDialog{parent}
 {
-  ((Menu*)this->getParent())->log.append("Chargement des scénarios");
-  scenario=readscenario("./scenarios.json");
-  if (scenario.levels.size()==0) 
-    finalcut::FMessageBox::error(this, "Impossible de charger le scénario par défaut !");
   listview.ignorePadding();
   listview.addColumn ("*");
   listview.addColumn ("Intitulé");  
   listview.hideSortIndicator(true);
   listview.setFocus();
-  std::vector<std::string> items;
-  for(size_t i=0; i < scenario.levels.size(); i++)
-  {
-    ((Menu*)this->getParent())->log.append(".");
-    items.clear();
-    items.push_back(to_string(i));
-    items.push_back(scenario.levels[i].title);
-    const finalcut::FStringList line (items.begin(), items.end());    
-    listview.insert (line);
-  }
   listview.addCallback
   (
     "row-changed",
     this, &ScenarioWindow::click
   );
+}
+
+bool ScenarioWindow::load(std::string file)
+{
+   scenario=readscenario(file);
+   if (scenario.levels.size()>0) 
+    {
+        std::vector<std::string> items;
+      for(size_t i=0; i < scenario.levels.size(); i++)
+      {
+        //((Menu*)this->getParent())->log.append(".");
+        items.clear();
+        items.push_back(to_string(i));
+        items.push_back(scenario.levels[i].title);
+        const finalcut::FStringList line (items.begin(), items.end());    
+        listview.insert (line);
+      }
+      return true;
+    }
+    else
+        return false;
 }
 
 void ScenarioWindow::click()
@@ -308,37 +318,53 @@ void TextWindow::adjustSize()
 
 Desassembler::Desassembler(TextWindow *log) : log(log)
 {
-    err = cs_open(CS_ARCH_X86, CS_MODE_16, &handle);
-    if (err != CS_ERR_OK) 
-        log->append("Erreur : Initialisation du désassembleur X86");
-    else
-        log->append("Initialisation du désassembleur X86");
+    try
+    {
+        err = cs_open(CS_ARCH_X86, CS_MODE_16, &handle);
+        if (err != CS_ERR_OK) 
+            Error("Désassembleur - initialisation....................[ERREUR]");
+        log->append("Désassembleur - initialisation....................[  OK  ]");
+    }
+    catch(exception const& e)
+    {
+       log->append(e.what());
+    }
 }
 
 void Desassembler::Desassemble(uint8_t *content, uint32_t address,uint32_t size, Unasm *unasm)
 {
-    srcsize=cs_disasm(handle, content, size, address, 0, &insn);
-    if (srcsize == 0)
-        log->append("Erreur de désassemblage");
-    else
-    {  
-        log->append("Désassemblage réussi, taille du source :"+to_string(srcsize));
-        unasm->src.clear();
-        unasm->pos.clear();
-		for (size_t j = 0; j < srcsize; j++)
-		{
-		    std::string *bytes = new std::string("");
-		    for (size_t k = 0; k < insn[j].size; k++)
-                *bytes=*bytes+intToHexString((int)insn[j].bytes[k], 2);
-            std::string adresse = intToHexString((int)insn[j].address, 8);  
-		    std::string *menmonic = new std::string((char *)insn[j].mnemonic);
-		    std::string *op_str = new std::string((char *)insn[j].op_str);
-		    std::array<std::string, 5> *array = new  std::array<std::string, 5>{"", adresse, *bytes, *menmonic, *op_str};
-		    unasm->src.push_back(*array);
-		    unasm->pos.push_back(insn[j].address);
+    try
+    {
+        srcsize=cs_disasm(handle, content, size, address, 0, &insn);
+        if (srcsize == 0)
+            Error("Désassembleur - Désassemblage.....................[ERREUR]");
+        else
+        {  
+            if (debug) log->append("Désassemblage - Désassemblage.....................[ "+to_string(srcsize)+"l ]");
+            unasm->src.clear();
+            unasm->pos.clear();
+		    for (size_t j = 0; j < srcsize; j++)
+		    {
+		        std::string *bytes = new std::string("");
+		        for (size_t k = 0; k < insn[j].size; k++)
+                    *bytes=*bytes+intToHexString((int)insn[j].bytes[k], 2);
+                std::string adresse = intToHexString((int)insn[j].address, 8);  
+		        std::string *menmonic = new std::string((char *)insn[j].mnemonic);
+		        std::string *op_str = new std::string((char *)insn[j].op_str);
+		        std::array<std::string, 5> *array = new  std::array<std::string, 5>{"", adresse, *bytes, *menmonic, *op_str};
+		        unasm->src.push_back(*array);
+		        unasm->pos.push_back(insn[j].address);
+            }
+		    cs_free(insn, srcsize);
         }
-		cs_free(insn, srcsize);
     }
+    catch(exception const& e)
+    {
+       unasm->src.clear();
+       unasm->pos.clear();
+       log->append(e.what());
+    }
+
 }
 
 //----------------------------------------------------------------------
@@ -347,88 +373,88 @@ void Desassembler::Desassemble(uint8_t *content, uint32_t address,uint32_t size,
 
 Assembler::Assembler(TextWindow *log) : log(log)
 {
-    std::stringstream out;
-    err = ks_open(KS_ARCH_X86, KS_MODE_16, &ks);
-    if (err != KS_ERR_OK) {
-        out << "Erreur : Initialisation de l'assembleur X86" << err;
-        log->append(out.str());
+    try
+    {
+        err = ks_open(KS_ARCH_X86, KS_MODE_16, &ks);
+        if (err != KS_ERR_OK) 
+            Error("Assembleur - initialisation.......................[ERREUR]");
+        log->append("Assembleur - initialisation.......................[  OK  ]");
     }
-    else
-        log->append("Initialisation de l'assembleur X86");
-    ks_option(ks, KS_OPT_SYNTAX, KS_OPT_SYNTAX_NASM);
+    catch(exception const& e)
+    {
+       log->append(e.what());
+    }
 }
 
 std::vector<Code> Assembler::MultiAssemble(std::string source,uint32_t address)
 {
-    std::vector<Code> mcode;
-    std::istringstream stream(source);
-    std::string line;
-    std::regex regex("^ *.org 0x([0-F]+)$");
-    Code *code=new Code;
-    bool begin=true;
-    int org=address;
-    code->address=org;
-    while (std::getline(stream, line)) 
+    try
     {
-        if (line.find(".org") != std::string::npos)
+        std::vector<Code> mcode;
+        std::istringstream stream(source);
+        std::string line;
+        std::regex regex("^ *.org 0x([0-F]+)$");
+        Code *code=new Code;
+        bool begin=true;
+        int org=address;
+        code->address=org;
+        while (std::getline(stream, line)) 
         {
-            std::smatch match;
-            if(std::regex_search(line, match, regex))
+            if (line.find(".org") != std::string::npos)
             {
-                org=std::stoul(match.str(1), nullptr, 16);
-            }
-            if (!begin)
+                std::smatch match;
+                if(std::regex_search(line, match, regex))
+                {
+                    org=std::stoul(match.str(1), nullptr, 16);
+                }
+                if (!begin)
+                {
+                    mcode.push_back(*code);
+                    code=new Code;
+                    code->address=org;                
+                }
+            }    
+            else
             {
-                mcode.push_back(*code);
-                code=new Code;
-                code->address=org;                
+                code->src.append(line+"\n");
             }
-        }    
-        else
-        {
-            code->src.append(line+"\n");
+            begin=false;
         }
-        begin=false;
-    }
-    if (code->src.size()>0)
-        mcode.push_back(*code);
-    for(size_t i=0;i<mcode.size();i++)
+        if (code->src.size()>0)
+            mcode.push_back(*code);
+        for(size_t i=0;i<mcode.size();i++)
+        {
+            //log->append(mcode[i].src);
+            mcode[i].assembled=false;
+            mcode[i].loaded=false;
+            this->Assemble(&mcode[i]);
+            if (debug) log->append("Section N°"+std::to_string(i)+" : "+intToHexString(mcode[i].address,8)+" -> "+to_string(mcode[i].size)+" octets");
+        }
+        return mcode;
+     }
+    catch(exception const& e)
     {
-        log->append("Section N°"+std::to_string(i)+" : "+intToHexString(mcode[i].address,8)+" -> "+to_string(mcode[i].src.size())+" octets");
-        log->append(mcode[i].src);
-        mcode[i].assembled=false;
-        mcode[i].loaded=false;
-        this->Assemble(&mcode[i]);
+       std::vector<Code> mcode;
+       log->append(e.what());
+       return mcode;
     }
-    return mcode;
+
 }
 
 void Assembler::Assemble(Code *code)
 {
-    std::stringstream out;
     size_t srcsize=code->src.size();
     unsigned char src_char[srcsize+1];
     strcpy(reinterpret_cast<char*>(src_char), code->src.c_str());
     err2=ks_asm(ks, reinterpret_cast<const char*>(src_char), code->address, &code->content, &code->size, &srcsize);
     if (err2 != KS_ERR_OK)
     {
-        log->append("Erreur d'assemblage");
         code->size=0;
         code->assembled=false;
+        Error("Assembleur - assemblage...........................[ERREUR]");
     }
     else
-    {  
-        out.clear();
-        out << "Assemblage réussi, taille du code :" << code->size;
         code->assembled=true;
-        if (code->size < 30)
-        {
-               out << "\n  ";
-               for (size_t count = 0; count < code->size; count++)
-                    out << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << (int)((uint8_t)code->content[count]) ;
-               log->append(out.str());   
-        }
-    }
 }
  
 //----------------------------------------------------------------------
@@ -457,7 +483,7 @@ std::string VMEngine::getFlags()
         int eflags=0;
         err = uc_reg_read(uc, UC_X86_REG_EFLAGS, &eflags);
         if (err != UC_ERR_OK)
-           log->append("Impossible de récupérer le registre: EFLAGS");
+            Error("VM IA86 - voir EFLAGS.............................[ERREUR]");
         std::stringstream out;
         out << "  CF:" << std::dec << ((eflags & 0x0001));
         if (rights > 8) 
@@ -513,7 +539,7 @@ std::string VMEngine::getRegs()
     }
     err = uc_reg_read_batch(uc, regsi836, ptrs, sizeof(regsi836));
     if (err > 0) {
-        log->append("Erreur lors de la récupération des registres depuis la VM");
+        Error("VM IA86 - voir REGISTRES..........................[ERREUR]");
         return "";
     }
     std::stringstream out;
@@ -597,14 +623,17 @@ std::string VMEngine::getRegs()
 
 void VMEngine::Init()
 {
-    std::stringstream out; 
-    err = uc_open(UC_ARCH_X86, UC_MODE_16, &uc);
-    if (err != UC_ERR_OK) {
-        out << "Impossible d'initialiser la machine virtuelle: " << err;
-        log->append(out.str());
+    try
+    {
+        err = uc_open(UC_ARCH_X86, UC_MODE_16, &uc);
+        if (err != UC_ERR_OK)
+            Error("VM IA86 - initilisation...........................[ERREUR]");
+        log->append("VM IA86 - initilisation...........................[  OK  ]");
     }
-    else
-        log->append("Initialisation de l'ordinateur IA86");
+    catch(exception const& e)
+    {
+        log->append(e.what());
+    }
 }
 
 bool VMEngine::isExecuted()
@@ -624,12 +653,14 @@ void VMEngine::Close()
 
 void VMEngine::Halt()
 {
+    if (this->executed)
+        log->append("VM IA86 - arret...................................[ERREUR]");
    this->executed=false;
 }
 
 void VMEngine::Unconfigure()
 {
-   this->executed=false;
+   this->Halt();
    this->initialized=false;
 }
 
@@ -650,21 +681,25 @@ uint32_t VMEngine::getNextInstr()
 std::vector<std::array<std::string, 5>> VMEngine::getInstr(int segment, int address,int size)
 {   
     uint32_t realaddress=segment*16+address;
-    if (realaddress<bufferaddress || realaddress+6>bufferaddress+500)
+    bool changed=false;
+    if (realaddress<bufferaddress || realaddress+(size*7)>bufferaddress+500)
     {
+        changed=true;
         int begin=realaddress-30;
         if (begin<0) begin=0x00000000;
         err = uc_mem_read(uc, begin, code, 500);
         if (err) 
         {
-            log->append("Erreur de copie mémoire depuis la machine virtuelle");
+            Error("VM IA86 - cache instructions......................[ERREUR]");
         }
         bufferaddress=begin;
     }
     crc = crc32(0,  code, 500);
-    if (crc != crc_old)
+    if (crc != crc_old || changed)
     {
             unasmer.Desassemble(code, address, 500, &unasm);
+            if (unasm.src.size()==0)
+                Error("VM IA86 - cache instructions......................[ERREUR]");
             crc_old=crc;
     }    
     int line=0;
@@ -697,23 +732,33 @@ int VMEngine::getLine()
 
 void VMEngine::Configure(State *init, std::string code)
 {
-    int status;
-    mcode.clear();
-    mcode=asmer.MultiAssemble(code,init->dump.regs.eip);
-    Close();
-    Init();
-    this->initialized=false;
-    this->executed=false;
-    log->append("Mappage de la mémoire virtuelle");
-    uc_mem_map(uc, 0, 1 * 1024 * 1024, UC_PROT_ALL);
-    for(size_t i=0;i<mcode.size();i++)
-        SetMem(&mcode[i]);
-    status=verify();
-    if (status==0)
-        this->initialized=true;
-    else
+    try
+    {
+        int status;
+        mcode.clear();
+        mcode=asmer.MultiAssemble(code,init->dump.regs.eip);
+        if (mcode.size()==0)
+            return;
+        Close();
+        Init();
         this->initialized=false;
-    SetRegs(init);
+        this->executed=false;
+        //log->append("Mappage de la mémoire virtuelle");
+        uc_mem_map(uc, 0, 1 * 1024 * 1024, UC_PROT_ALL);
+        for(size_t i=0;i<mcode.size();i++)
+            SetMem(&mcode[i]);
+        status=verify();
+        if (status==0)
+            this->initialized=true;
+        else
+            this->initialized=false;
+        SetRegs(init);
+    }
+    catch(exception const& e)
+    {
+        log->append(e.what());
+        this->initialized=false;
+    }
 }
 
 int VMEngine::verify()
@@ -740,29 +785,47 @@ uint32_t VMEngine::getCurrent()
 
 uint32_t VMEngine::getEIP()
 {
-        int eip=0;
+        int eip;
         err = uc_reg_read(uc, UC_X86_REG_EIP, &eip);
         if (err != UC_ERR_OK)
-           log->append("Impossible de récupérer le registre: EIP");
+           Error("VM IA86 - voir EIP................................[ERREUR]");
         return eip;
 }
 
 uint16_t VMEngine::getCS()
 {
-        int cs=0;
+        int cs;
         err = uc_reg_read(uc, UC_X86_REG_CS, &cs);
         if (err != UC_ERR_OK)
-           log->append("Impossible de récupérer le registre: CS");
+           Error("VM IA86 - voir CS.................................[ERREUR]");
         return cs;
 }
 
 uint16_t VMEngine::getDS()
 {
-        int ds=9;
+        int ds;
         err = uc_reg_read(uc, UC_X86_REG_DS, &ds);
         if (err != UC_ERR_OK)
-           log->append("Impossible de récupérer le registre: DS");
+           Error("VM IA86 - voir DS.................................[ERREUR]");
         return ds;
+}
+
+uint16_t VMEngine::getES()
+{
+        int es;
+        err = uc_reg_read(uc, UC_X86_REG_ES, &es);
+        if (err != UC_ERR_OK)
+           Error("VM IA86 - voir ES.................................[ERREUR]");
+        return es;
+}
+
+uint16_t VMEngine::getSS()
+{
+        int ss;
+        err = uc_reg_read(uc, UC_X86_REG_SS, &ss);
+        if (err != UC_ERR_OK)
+           Error("VM IA86 - voir SS.................................[ERREUR]");
+        return ss;
 }
 
 void VMEngine::SetMem(Code *code)
@@ -772,23 +835,19 @@ void VMEngine::SetMem(Code *code)
         if (err) 
         {
             code->loaded=false;
-            log->append("Erreur de copie mémoire dans la machine virtuelle");
+            Error("VM IA86 - copie mémoire...........................[ERREUR]");
             return;
         }
-        else
-        {
-            code->loaded=true;
-            log->append("Chargement en mémoire de la machine virtuelle, taille: "+to_string(code->size));
-        }
+        code->loaded=true;
 }
  
 void VMEngine::SetRegs(State *init)
 {
         std::stringstream out;
-        out << "Configuration initiale de l'ordinateur IA86:\n  "; 
+        out << "VM IA86 - configuration initiale..................[  OK  ]"; 
         err = uc_reg_write(uc, UC_X86_REG_EIP, &init->dump.regs.eip);
         if (err != UC_ERR_OK)
-           log->append("Impossible d'initialiser le registre: EIP");
+           Error("VM IA86 - configuration initiale EIP..............[ERREUR]");
         else
         if (init->dump.regs.eip != 0x00000000)
             if ((init->dump.regs.eip & 0xFFFF0000) == 0x00000000)
@@ -797,7 +856,7 @@ void VMEngine::SetRegs(State *init)
                 out << "EIP=" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << init->dump.regs.eip << " ";     
         err = uc_reg_write(uc, UC_X86_REG_EDI, &init->dump.regs.edi);
         if (err != UC_ERR_OK)
-           log->append("Impossible d'initialiser le registre: EDI");
+           Error("VM IA86 - configuration initiale EDI..............[ERREUR]");
         else
         if (init->dump.regs.edi != 0x00000000)
             if ((init->dump.regs.edi & 0xFFFF0000) == 0x00000000)
@@ -806,7 +865,7 @@ void VMEngine::SetRegs(State *init)
                 out << "EDI=" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << init->dump.regs.edi << " ";               
         err = uc_reg_write(uc, UC_X86_REG_ESI, &init->dump.regs.esi);
         if (err != UC_ERR_OK)
-           log->append("Impossible d'initialiser le registre: ESE");
+           Error("VM IA86 - configuration initiale ESI..............[ERREUR]");
         else
         if (init->dump.regs.esi != 0x00000000)
             if ((init->dump.regs.esi & 0xFFFF0000) == 0x00000000)
@@ -815,7 +874,7 @@ void VMEngine::SetRegs(State *init)
                 out << "ESI=" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << init->dump.regs.esi << " ";               
         err = uc_reg_write(uc, UC_X86_REG_EBP, &init->dump.regs.ebp);
         if (err != UC_ERR_OK)
-           log->append("Impossible d'initialiser le registre: EBP");
+           Error("VM IA86 - configuration initiale EBP..............[ERREUR]");
         else
         if (init->dump.regs.ebp != 0x00000000) 
             if ((init->dump.regs.ebp & 0xFFFF0000) == 0x00000000)
@@ -824,7 +883,7 @@ void VMEngine::SetRegs(State *init)
                 out << "EBP=" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << init->dump.regs.ebp << " ";               
         err = uc_reg_write(uc, UC_X86_REG_ESP, &init->dump.regs.esp);
         if (err != UC_ERR_OK)
-           log->append("Impossible d'initialiser le registre: ESP");
+           Error("VM IA86 - configuration initiale ESP..............[ERREUR]");
         else
         if (init->dump.regs.esp != 0x00000000)
             if ((init->dump.regs.esp & 0xFFFF0000) == 0x00000000)
@@ -833,7 +892,7 @@ void VMEngine::SetRegs(State *init)
                 out << "ESP=" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << init->dump.regs.esp << " ";               
         err = uc_reg_write(uc, UC_X86_REG_EBX, &init->dump.regs.ebx);
         if (err != UC_ERR_OK)
-           log->append("Impossible d'initialiser le registre: EBX");
+           Error("VM IA86 - configuration initiale EBX..............[ERREUR]");
         else
         if (init->dump.regs.ebx != 0x00000000)
             if ((init->dump.regs.ebx & 0xFFFF0000) == 0x00000000)
@@ -842,7 +901,7 @@ void VMEngine::SetRegs(State *init)
                 out << "EBX=" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << init->dump.regs.ebx << " ";               
         err = uc_reg_write(uc, UC_X86_REG_EDX, &init->dump.regs.edx);
         if (err != UC_ERR_OK)
-           log->append("Impossible d'initialiser le registre: EDX");
+           Error("VM IA86 - configuration initiale EDX..............[ERREUR]");
         else
         if (init->dump.regs.edx != 0x00000000)
             if ((init->dump.regs.edx & 0xFFFF0000) == 0x00000000)
@@ -851,7 +910,7 @@ void VMEngine::SetRegs(State *init)
                 out << "EDX=" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << init->dump.regs.edx << " ";               
         err = uc_reg_write(uc, UC_X86_REG_ECX, &init->dump.regs.ecx);
         if (err != UC_ERR_OK)
-           log->append("Impossible d'initialiser le registre: ECX");
+           Error("VM IA86 - configuration initiale ECX..............[ERREUR]");
         else
         if (init->dump.regs.ecx != 0x00000000)
             if ((init->dump.regs.ecx & 0xFFFF0000) == 0x00000000)
@@ -860,7 +919,7 @@ void VMEngine::SetRegs(State *init)
                 out << "ECX=" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << init->dump.regs.ecx << " ";               
         err = uc_reg_write(uc, UC_X86_REG_EAX, &init->dump.regs.eax);
         if (err != UC_ERR_OK)
-           log->append("Impossible d'initialiser le registre: EAX");
+           Error("VM IA86 - configuration initiale EAX..............[ERREUR]");
         else
         if (init->dump.regs.eax != 0x00000000)
             if ((init->dump.regs.eax & 0xFFFF0000) == 0x00000000)
@@ -872,17 +931,25 @@ void VMEngine::SetRegs(State *init)
 
 void VMEngine::Run(uint32_t end,uint64_t timeout)
 {
-    err=uc_emu_start(uc, this->getCurrent(), end, timeout, 0);
-    if (err) 
+    try
     {
-        log->append("Erreur lors de l'exécution de la machine virtuelle");
-        this->executed=false;
-        return;
-    }
-    else
-    {
-        this->executed="true";
-    }
+        err=uc_emu_start(uc, this->getCurrent(), end, timeout, 0);
+        if (err) 
+        {
+            this->Halt();
+            Error("VM IA86 - execution...............................[ERREUR]");
+        }
+        else
+        {
+            if (!this->executed)
+            log->append("VM IA86 - execution...............................[ INFO ]");
+            this->executed="true";
+        }
+   }
+   catch(exception const& e)
+   {
+        log->append(e.what());
+   }
 }
 
 //----------------------------------------------------------------------
@@ -911,9 +978,49 @@ void Menu::initNow()
 void Menu::initCore()
 {
   addTimer (50);
-  log.append(scenario.title);
-  if (scenario.levels.size()>0)
+  if (scenar.load("./scenarios.json"))
+  {
+    log.append("Application - charge scénarios....................[  OK  ]");
+    log.append("-={ "+ scenario.title+" }=-");
+    if (scenario.levels.size()>0)
     loadLevel();
+    maxi();
+  }
+  else
+  {
+    log.append("Application - charge scénarios....................[ERREUR]");
+    vm.Unconfigure();
+    mini();
+  }
+}
+
+void Menu::mini()
+{
+  this->hide();
+  flags.hide();
+  stack.hide();
+  mem.hide();
+  screen.hide();
+  log.show();
+  edit.hide();
+  view.hide();
+  regs.hide();
+  tuto.hide();
+  debug.hide();
+  scenar.hide();
+  Options.hide();
+  Tools.hide();
+  Window.hide();
+  Debug.hide();
+}
+
+void Menu::maxi()
+{
+    AdjustWindows();
+    Options.show();
+    Tools.show();
+    Window.show();
+    Debug.show();
 }
 
 void Menu::initWindows()
@@ -1118,15 +1225,13 @@ void Menu::onClose (finalcut::FCloseEvent* ev)
 
 void Menu::loadLevel()
 {
-  log.append("Chargement du scénario "+scenario.levels[scenar.getselected()].title);
+  log.append("Application - charge niveau.......................[ INFO ]");
   view.setText("Objectif: "+scenario.levels[scenar.getselected()].title);
   view.clear();
   view.append(scenario.levels[scenar.getselected()].description);
   tuto.clear();
   tuto.append(scenario.levels[scenar.getselected()].tutorial);
-  regs.set("En attente d'initialisation...");
   edit.set(scenario.levels[scenar.getselected()].code);
-  AdjustWindows();
   debug.clear();
   vm.Unconfigure();
   vm.setRights(scenario.levels[scenar.getselected()].rights);
@@ -1166,8 +1271,16 @@ void Menu::about()
 
 void Menu::showInstr()
 {
-    debug.set(vm.getInstr(vm.getCS(),vm.getEIP(),debug.getHeight()-3));
-    debug.setmark(vm.getLine());
+    try
+    {
+        debug.set(vm.getInstr(vm.getCS(),vm.getEIP(),debug.getHeight()-3));
+        debug.setmark(vm.getLine());
+    }
+    catch(exception const& e)
+    {
+        log.append(e.what());
+        vm.Halt();
+    }
 }
 
 void Menu::refresh()
@@ -1179,8 +1292,16 @@ void Menu::refresh()
   }
   else
   {
-    regs.set(vm.getRegs());
-    flags.set(vm.getFlags());
+      try
+    {
+        regs.set(vm.getRegs());
+        flags.set(vm.getFlags());
+    }
+    catch(exception const& e)
+    {
+        log.append(e.what());
+        vm.Halt();
+    }
   }
   if (!vm.isExecuted())
   {

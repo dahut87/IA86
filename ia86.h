@@ -143,6 +143,26 @@ struct Unasm
     std::vector<uint32_t> pos;
 };
 
+class Error: public exception
+{
+public:
+    Error(string const& phrase="") throw()
+         :m_phrase(phrase)
+    {}
+ 
+     virtual const char* what() const throw()
+     {
+         return m_phrase.c_str();
+     }
+    
+    virtual ~Error() throw()
+    {}
+ 
+private:
+    string m_phrase;
+};
+
+
 class ScenarioWindow final : public finalcut::FDialog
 {
   public:
@@ -156,6 +176,7 @@ class ScenarioWindow final : public finalcut::FDialog
     ScenarioWindow& operator = (const ScenarioWindow&) = delete;
     // Method
     int getselected();
+    bool load(std::string file);
   private:
     // Method
     int selected;
@@ -296,6 +317,8 @@ class VMEngine
     uint32_t getEIP();
     uint16_t getCS();
     uint16_t getDS();
+    uint16_t getES();
+    uint16_t getSS();
   private:
     int rights;
     void Init();
@@ -344,6 +367,8 @@ class Menu final : public finalcut::FDialog
     void trace();
     void step();
     void about();
+    void mini();
+    void maxi();
     void AdjustWindows();
     void initWindows();
     void initLayout() override;
