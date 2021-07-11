@@ -8,8 +8,13 @@
         "niveau_tutoriel" : "Ceci vous...",
         "niveau_code" : "mov ax,0x545
 inc dx
-mov esi,0x44441234
-hlt",
+mov esi,0x44440234
+hlt
+.org 0x8D
+mov es,ax
+.org 0x14D
+mov es,ax
+",
         "niveau_droits" : 10,
         "niveau_initial" : 
         {

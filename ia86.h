@@ -327,7 +327,7 @@ class VMEngine
     bool initialized=false;
     uc_engine *uc;
     uc_err err;
-    int bufferaddress=-555;
+    int bufferaddress;
     int address_old;
     uint8_t *code;
     uLong crc,crc_old;

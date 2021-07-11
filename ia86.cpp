@@ -679,26 +679,27 @@ uint32_t VMEngine::getNextInstr()
 std::vector<std::array<std::string, 5>> VMEngine::getInstr(int segment, int address,int size)
 {   
     uint32_t realaddress=segment*16+address;
-    bool changed=false;
     if (realaddress<bufferaddress || realaddress+(size*7)>bufferaddress+500)
     {
-        changed=true;
-        int begin=realaddress-30;
-        if (begin<0) begin=0x00000000;
-        err = uc_mem_read(uc, begin, code, 500);
-        if (err) 
-        {
-            throw Error("VM IA86 - cache instructions......................[ERREUR]");
-        }
-        bufferaddress=begin;
+    log->append("read");
+        bufferaddress=realaddress-30;
+        if (bufferaddress<0) 
+            bufferaddress=0x00000000;
+        address_old=address-30;
+        if (address_old<0) 
+            address_old=0x00000000;
     }
+    err = uc_mem_read(uc, bufferaddress, code, 500);
+    if (err) 
+        throw Error("VM IA86 - cache instructions......................[ERREUR]");
     crc = crc32(0,  code, 500);
-    if (crc != crc_old || changed)
+    if (crc != crc_old)
     {
-            unasmer.Desassemble(code, address, 500, &unasm);
-            if (unasm.src.size()==0)
-                throw Error("VM IA86 - cache instructions......................[ERREUR]");
-            crc_old=crc;
+     log->append("unasm");
+        unasmer.Desassemble(code, address_old, 500, &unasm);
+        if (unasm.src.size()==0)
+            throw Error("VM IA86 - cache instructions......................[ERREUR]");
+        crc_old=crc;
     }    
     int line=0;
     for(int pos: unasm.pos)
@@ -739,6 +740,7 @@ void VMEngine::Configure(State *init, std::string code)
             return;
         Close();
         Init();
+        bufferaddress=-666;
         this->initialized=false;
         this->executed=false;
         //log->append("Mappage de la mémoire virtuelle");
