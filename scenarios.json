@@ -10,6 +10,7 @@
 inc dx
 mov esi,0x44440234
 hlt
+jmp 0x14D
 .org 0x8D
 mov es,ax
 .org 0x14D

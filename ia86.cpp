@@ -336,6 +336,7 @@ void Desassembler::Desassemble(uint8_t *content, uint32_t address,uint32_t size,
     try
     {
         srcsize=cs_disasm(handle, content, size, address, 0, &insn);
+        cs_option(handle, CS_OPT_DETAIL, CS_OPT_ON);
         if (srcsize == 0)
             throw Error("Désassembleur - désassemblage.....................[ERREUR]");
         else
@@ -384,6 +385,7 @@ Assembler::Assembler(TextWindow *log) : log(log)
     {
        log->append(e.what());
     }
+    ks_option(ks, KS_OPT_SYNTAX, KS_OPT_SYNTAX_NASM);
 }
 
 std::vector<Code> Assembler::MultiAssemble(std::string source,uint32_t address)
