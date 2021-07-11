@@ -322,7 +322,7 @@ Desassembler::Desassembler(TextWindow *log) : log(log)
     {
         err = cs_open(CS_ARCH_X86, CS_MODE_16, &handle);
         if (err != CS_ERR_OK) 
-            Error("Désassembleur - initialisation....................[ERREUR]");
+            throw Error("Désassembleur - initialisation....................[ERREUR]");
         log->append("Désassembleur - initialisation....................[  OK  ]");
     }
     catch(exception const& e)
@@ -337,10 +337,10 @@ void Desassembler::Desassemble(uint8_t *content, uint32_t address,uint32_t size,
     {
         srcsize=cs_disasm(handle, content, size, address, 0, &insn);
         if (srcsize == 0)
-            Error("Désassembleur - Désassemblage.....................[ERREUR]");
+            throw Error("Désassembleur - désassemblage.....................[ERREUR]");
         else
         {  
-            if (debug) log->append("Désassemblage - Désassemblage.....................[ "+to_string(srcsize)+"l ]");
+            if (debug) log->append("Désassemblage - désassemblage.....................[ "+to_string(srcsize)+"l ]");
             unasm->src.clear();
             unasm->pos.clear();
 		    for (size_t j = 0; j < srcsize; j++)
@@ -377,7 +377,7 @@ Assembler::Assembler(TextWindow *log) : log(log)
     {
         err = ks_open(KS_ARCH_X86, KS_MODE_16, &ks);
         if (err != KS_ERR_OK) 
-            Error("Assembleur - initialisation.......................[ERREUR]");
+            throw Error("Assembleur - initialisation.......................[ERREUR]");
         log->append("Assembleur - initialisation.......................[  OK  ]");
     }
     catch(exception const& e)
@@ -423,13 +423,8 @@ std::vector<Code> Assembler::MultiAssemble(std::string source,uint32_t address)
         if (code->src.size()>0)
             mcode.push_back(*code);
         for(size_t i=0;i<mcode.size();i++)
-        {
-            //log->append(mcode[i].src);
-            mcode[i].assembled=false;
-            mcode[i].loaded=false;
             this->Assemble(&mcode[i]);
-            if (debug) log->append("Section N°"+std::to_string(i)+" : "+intToHexString(mcode[i].address,8)+" -> "+to_string(mcode[i].size)+" octets");
-        }
+        log->append("Assembleur - assemblage...........................[  OK  ]");
         return mcode;
      }
     catch(exception const& e)
@@ -451,7 +446,8 @@ void Assembler::Assemble(Code *code)
     {
         code->size=0;
         code->assembled=false;
-        Error("Assembleur - assemblage...........................[ERREUR]");
+        code->loaded=false;
+        throw Error("Assembleur - assemblage...........................[ERREUR]");
     }
     else
         code->assembled=true;
@@ -483,7 +479,7 @@ std::string VMEngine::getFlags()
         int eflags=0;
         err = uc_reg_read(uc, UC_X86_REG_EFLAGS, &eflags);
         if (err != UC_ERR_OK)
-            Error("VM IA86 - voir EFLAGS.............................[ERREUR]");
+            throw Error("VM IA86 - voir EFLAGS.............................[ERREUR]");
         std::stringstream out;
         out << "  CF:" << std::dec << ((eflags & 0x0001));
         if (rights > 8) 
@@ -539,7 +535,7 @@ std::string VMEngine::getRegs()
     }
     err = uc_reg_read_batch(uc, regsi836, ptrs, sizeof(regsi836));
     if (err > 0) {
-        Error("VM IA86 - voir REGISTRES..........................[ERREUR]");
+        throw Error("VM IA86 - voir REGISTRES..........................[ERREUR]");
         return "";
     }
     std::stringstream out;
@@ -627,7 +623,7 @@ void VMEngine::Init()
     {
         err = uc_open(UC_ARCH_X86, UC_MODE_16, &uc);
         if (err != UC_ERR_OK)
-            Error("VM IA86 - initilisation...........................[ERREUR]");
+            throw Error("VM IA86 - initilisation...........................[ERREUR]");
         log->append("VM IA86 - initilisation...........................[  OK  ]");
     }
     catch(exception const& e)
@@ -654,13 +650,15 @@ void VMEngine::Close()
 void VMEngine::Halt()
 {
     if (this->executed)
-        log->append("VM IA86 - arret...................................[ERREUR]");
+        log->append("VM IA86 - arret...................................[ INFO ]");
    this->executed=false;
 }
 
 void VMEngine::Unconfigure()
 {
    this->Halt();
+    if (this->initialized)
+        log->append("VM IA86 - déconfiguration.........................[ INFO ]");
    this->initialized=false;
 }
 
@@ -690,7 +688,7 @@ std::vector<std::array<std::string, 5>> VMEngine::getInstr(int segment, int addr
         err = uc_mem_read(uc, begin, code, 500);
         if (err) 
         {
-            Error("VM IA86 - cache instructions......................[ERREUR]");
+            throw Error("VM IA86 - cache instructions......................[ERREUR]");
         }
         bufferaddress=begin;
     }
@@ -699,7 +697,7 @@ std::vector<std::array<std::string, 5>> VMEngine::getInstr(int segment, int addr
     {
             unasmer.Desassemble(code, address, 500, &unasm);
             if (unasm.src.size()==0)
-                Error("VM IA86 - cache instructions......................[ERREUR]");
+                throw Error("VM IA86 - cache instructions......................[ERREUR]");
             crc_old=crc;
     }    
     int line=0;
@@ -746,13 +744,21 @@ void VMEngine::Configure(State *init, std::string code)
         //log->append("Mappage de la mémoire virtuelle");
         uc_mem_map(uc, 0, 1 * 1024 * 1024, UC_PROT_ALL);
         for(size_t i=0;i<mcode.size();i++)
-            SetMem(&mcode[i]);
+        {
+           if (mcode[i].assembled) 
+                SetMem(&mcode[i]);
+           else     
+                throw Error("VM IA86 - code non assemblé...................[ERREUR]");
+           if (debug) log->append("Section N°"+std::to_string(i)+" : "+intToHexString(mcode[i].address,8)+" -> "+to_string(mcode[i].size)+" octets");
+        }
         status=verify();
         if (status==0)
+        {
             this->initialized=true;
+            SetRegs(init);   
+        }
         else
             this->initialized=false;
-        SetRegs(init);
     }
     catch(exception const& e)
     {
@@ -788,7 +794,7 @@ uint32_t VMEngine::getEIP()
         int eip;
         err = uc_reg_read(uc, UC_X86_REG_EIP, &eip);
         if (err != UC_ERR_OK)
-           Error("VM IA86 - voir EIP................................[ERREUR]");
+           throw Error("VM IA86 - voir EIP................................[ERREUR]");
         return eip;
 }
 
@@ -797,7 +803,7 @@ uint16_t VMEngine::getCS()
         int cs;
         err = uc_reg_read(uc, UC_X86_REG_CS, &cs);
         if (err != UC_ERR_OK)
-           Error("VM IA86 - voir CS.................................[ERREUR]");
+           throw Error("VM IA86 - voir CS.................................[ERREUR]");
         return cs;
 }
 
@@ -806,7 +812,7 @@ uint16_t VMEngine::getDS()
         int ds;
         err = uc_reg_read(uc, UC_X86_REG_DS, &ds);
         if (err != UC_ERR_OK)
-           Error("VM IA86 - voir DS.................................[ERREUR]");
+           throw Error("VM IA86 - voir DS.................................[ERREUR]");
         return ds;
 }
 
@@ -815,7 +821,7 @@ uint16_t VMEngine::getES()
         int es;
         err = uc_reg_read(uc, UC_X86_REG_ES, &es);
         if (err != UC_ERR_OK)
-           Error("VM IA86 - voir ES.................................[ERREUR]");
+           throw Error("VM IA86 - voir ES.................................[ERREUR]");
         return es;
 }
 
@@ -824,7 +830,7 @@ uint16_t VMEngine::getSS()
         int ss;
         err = uc_reg_read(uc, UC_X86_REG_SS, &ss);
         if (err != UC_ERR_OK)
-           Error("VM IA86 - voir SS.................................[ERREUR]");
+           throw Error("VM IA86 - voir SS.................................[ERREUR]");
         return ss;
 }
 
@@ -835,7 +841,7 @@ void VMEngine::SetMem(Code *code)
         if (err) 
         {
             code->loaded=false;
-            Error("VM IA86 - copie mémoire...........................[ERREUR]");
+            throw Error("VM IA86 - copie mémoire...........................[ERREUR]");
             return;
         }
         code->loaded=true;
@@ -847,7 +853,7 @@ void VMEngine::SetRegs(State *init)
         out << "VM IA86 - configuration initiale..................[  OK  ]"; 
         err = uc_reg_write(uc, UC_X86_REG_EIP, &init->dump.regs.eip);
         if (err != UC_ERR_OK)
-           Error("VM IA86 - configuration initiale EIP..............[ERREUR]");
+           throw Error("VM IA86 - configuration initiale EIP..............[ERREUR]");
         else
         if (init->dump.regs.eip != 0x00000000)
             if ((init->dump.regs.eip & 0xFFFF0000) == 0x00000000)
@@ -856,7 +862,7 @@ void VMEngine::SetRegs(State *init)
                 out << "EIP=" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << init->dump.regs.eip << " ";     
         err = uc_reg_write(uc, UC_X86_REG_EDI, &init->dump.regs.edi);
         if (err != UC_ERR_OK)
-           Error("VM IA86 - configuration initiale EDI..............[ERREUR]");
+           throw Error("VM IA86 - configuration initiale EDI..............[ERREUR]");
         else
         if (init->dump.regs.edi != 0x00000000)
             if ((init->dump.regs.edi & 0xFFFF0000) == 0x00000000)
@@ -865,7 +871,7 @@ void VMEngine::SetRegs(State *init)
                 out << "EDI=" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << init->dump.regs.edi << " ";               
         err = uc_reg_write(uc, UC_X86_REG_ESI, &init->dump.regs.esi);
         if (err != UC_ERR_OK)
-           Error("VM IA86 - configuration initiale ESI..............[ERREUR]");
+           throw Error("VM IA86 - configuration initiale ESI..............[ERREUR]");
         else
         if (init->dump.regs.esi != 0x00000000)
             if ((init->dump.regs.esi & 0xFFFF0000) == 0x00000000)
@@ -874,7 +880,7 @@ void VMEngine::SetRegs(State *init)
                 out << "ESI=" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << init->dump.regs.esi << " ";               
         err = uc_reg_write(uc, UC_X86_REG_EBP, &init->dump.regs.ebp);
         if (err != UC_ERR_OK)
-           Error("VM IA86 - configuration initiale EBP..............[ERREUR]");
+           throw Error("VM IA86 - configuration initiale EBP..............[ERREUR]");
         else
         if (init->dump.regs.ebp != 0x00000000) 
             if ((init->dump.regs.ebp & 0xFFFF0000) == 0x00000000)
@@ -883,7 +889,7 @@ void VMEngine::SetRegs(State *init)
                 out << "EBP=" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << init->dump.regs.ebp << " ";               
         err = uc_reg_write(uc, UC_X86_REG_ESP, &init->dump.regs.esp);
         if (err != UC_ERR_OK)
-           Error("VM IA86 - configuration initiale ESP..............[ERREUR]");
+           throw Error("VM IA86 - configuration initiale ESP..............[ERREUR]");
         else
         if (init->dump.regs.esp != 0x00000000)
             if ((init->dump.regs.esp & 0xFFFF0000) == 0x00000000)
@@ -892,7 +898,7 @@ void VMEngine::SetRegs(State *init)
                 out << "ESP=" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << init->dump.regs.esp << " ";               
         err = uc_reg_write(uc, UC_X86_REG_EBX, &init->dump.regs.ebx);
         if (err != UC_ERR_OK)
-           Error("VM IA86 - configuration initiale EBX..............[ERREUR]");
+           throw Error("VM IA86 - configuration initiale EBX..............[ERREUR]");
         else
         if (init->dump.regs.ebx != 0x00000000)
             if ((init->dump.regs.ebx & 0xFFFF0000) == 0x00000000)
@@ -901,7 +907,7 @@ void VMEngine::SetRegs(State *init)
                 out << "EBX=" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << init->dump.regs.ebx << " ";               
         err = uc_reg_write(uc, UC_X86_REG_EDX, &init->dump.regs.edx);
         if (err != UC_ERR_OK)
-           Error("VM IA86 - configuration initiale EDX..............[ERREUR]");
+           throw Error("VM IA86 - configuration initiale EDX..............[ERREUR]");
         else
         if (init->dump.regs.edx != 0x00000000)
             if ((init->dump.regs.edx & 0xFFFF0000) == 0x00000000)
@@ -910,7 +916,7 @@ void VMEngine::SetRegs(State *init)
                 out << "EDX=" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << init->dump.regs.edx << " ";               
         err = uc_reg_write(uc, UC_X86_REG_ECX, &init->dump.regs.ecx);
         if (err != UC_ERR_OK)
-           Error("VM IA86 - configuration initiale ECX..............[ERREUR]");
+           throw Error("VM IA86 - configuration initiale ECX..............[ERREUR]");
         else
         if (init->dump.regs.ecx != 0x00000000)
             if ((init->dump.regs.ecx & 0xFFFF0000) == 0x00000000)
@@ -919,7 +925,7 @@ void VMEngine::SetRegs(State *init)
                 out << "ECX=" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << init->dump.regs.ecx << " ";               
         err = uc_reg_write(uc, UC_X86_REG_EAX, &init->dump.regs.eax);
         if (err != UC_ERR_OK)
-           Error("VM IA86 - configuration initiale EAX..............[ERREUR]");
+           throw Error("VM IA86 - configuration initiale EAX..............[ERREUR]");
         else
         if (init->dump.regs.eax != 0x00000000)
             if ((init->dump.regs.eax & 0xFFFF0000) == 0x00000000)
@@ -933,17 +939,20 @@ void VMEngine::Run(uint32_t end,uint64_t timeout)
 {
     try
     {
-        err=uc_emu_start(uc, this->getCurrent(), end, timeout, 0);
-        if (err) 
+        if (verify()==0 && this->initialized)
         {
-            this->Halt();
-            Error("VM IA86 - execution...............................[ERREUR]");
-        }
-        else
-        {
-            if (!this->executed)
-            log->append("VM IA86 - execution...............................[ INFO ]");
-            this->executed="true";
+            err=uc_emu_start(uc, this->getCurrent(), end, timeout, 0);
+            if (err) 
+            {
+                this->Halt();
+                throw Error("VM IA86 - execution...............................[ERREUR]");
+            }
+            else
+            {
+                if (!this->executed)
+                log->append("VM IA86 - execution...............................[ INFO ]");
+                this->executed="true";
+            }
         }
    }
    catch(exception const& e)
@@ -983,13 +992,13 @@ void Menu::initCore()
     log.append("Application - charge scénarios....................[  OK  ]");
     log.append("-={ "+ scenario.title+" }=-");
     if (scenario.levels.size()>0)
-    loadLevel();
+        loadLevel();
     maxi();
   }
   else
   {
-    log.append("Application - charge scénarios....................[ERREUR]");
     vm.Unconfigure();
+    log.append("Application - charge scénarios....................[ERREUR]");
     mini();
   }
 }
@@ -1016,7 +1025,6 @@ void Menu::mini()
 
 void Menu::maxi()
 {
-    AdjustWindows();
     Options.show();
     Tools.show();
     Window.show();
@@ -1225,6 +1233,7 @@ void Menu::onClose (finalcut::FCloseEvent* ev)
 
 void Menu::loadLevel()
 {
+  vm.Unconfigure();
   log.append("Application - charge niveau.......................[ INFO ]");
   view.setText("Objectif: "+scenario.levels[scenar.getselected()].title);
   view.clear();
@@ -1233,8 +1242,8 @@ void Menu::loadLevel()
   tuto.append(scenario.levels[scenar.getselected()].tutorial);
   edit.set(scenario.levels[scenar.getselected()].code);
   debug.clear();
-  vm.Unconfigure();
   vm.setRights(scenario.levels[scenar.getselected()].rights);
+  AdjustWindows();
 }
 
 void Menu::end()
@@ -1273,8 +1282,11 @@ void Menu::showInstr()
 {
     try
     {
-        debug.set(vm.getInstr(vm.getCS(),vm.getEIP(),debug.getHeight()-3));
-        debug.setmark(vm.getLine());
+        if (vm.isInitialized())
+        {
+            debug.set(vm.getInstr(vm.getCS(),vm.getEIP(),debug.getHeight()-3));
+            debug.setmark(vm.getLine());
+        }
     }
     catch(exception const& e)
     {
@@ -1321,56 +1333,23 @@ void Menu::exec()
 {
   if (!vm.isInitialized())
     compile();
-  if (vm.verify()==1)
-  {
-    finalcut::FMessageBox::error(this, "Vous devez compiler le source d'abord !");
-    return;
-  }
-  else if (vm.verify()==2)
-  {
-    finalcut::FMessageBox::error(this, "Une erreur de chargement a eu lieu vers la VM !");
-    return;
-  }
-  else
-    vm.Run(0xFFFF,0);
-  showInstr();
+   vm.Run(0xFFFF,0);
+   showInstr();
 }
 
 void Menu::trace()
 {
   if (!vm.isInitialized())
     compile();
-  if (vm.verify()==1)
-  {
-    finalcut::FMessageBox::error(this, "Vous devez compiler le source d'abord !");
-    return;
-  }
-  else if (vm.verify()==2)
-  {
-    finalcut::FMessageBox::error(this, "Une erreur de chargement a eu lieu vers la VM !");
-    return;
-  }
-  else
-    vm.Run(vm.getNextInstr(),0);
+  vm.Run(vm.getNextInstr(),0);
   showInstr();
 }
 
 void Menu::step()
 {
   if (!vm.isInitialized())
-    compile();
-  if (vm.verify()==1)
-  {
-    finalcut::FMessageBox::error(this, "Vous devez compiler le source d'abord !");
-    return;
-  }
-  else if (vm.verify()==2)
-  {
-    finalcut::FMessageBox::error(this, "Une erreur de chargement a eu lieu vers la VM !");
-    return;
-  }
-  else
-    vm.Run(vm.getNextInstr(),0);
+    compile(); 
+  vm.Run(vm.getNextInstr(),0);
   showInstr();
 }
 
