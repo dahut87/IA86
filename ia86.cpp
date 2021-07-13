@@ -80,6 +80,17 @@ Scenario scenario;
 Unasm unasm;
 int marker;
 bool debug=true;
+uc_hook uh_mem;
+uc_hook uh_code;
+uc_hook uh_call;
+uc_hook uh_int;
+bool step=false;
+bool call=false;
+bool ok=false;
+bool executed=false;
+bool initialized=false;
+uint32_t hadcall=0x0;
+
 //----------------------------------------------------------------------
 // Classe ScenarioWindow
 //----------------------------------------------------------------------
@@ -153,7 +164,6 @@ InstructionWindow::InstructionWindow (finalcut::FWidget* parent)
 {
 
   listview.ignorePadding();
-  listview.addColumn ("P");
   listview.addColumn ("Adresse");
   listview.addColumn ("Opcodes     ");
   listview.addColumn ("Mnémo.");
@@ -162,7 +172,7 @@ InstructionWindow::InstructionWindow (finalcut::FWidget* parent)
   listview.setFocus();
 }
 
-std::vector<std::array<std::string, 5>> InstructionWindow::get()
+std::vector<std::array<std::string, 4>> InstructionWindow::get()
 {
     return content;
 }
@@ -183,7 +193,7 @@ int InstructionWindow::getsize()
   return listview.getCount();
 }
 
-void InstructionWindow::set(std::vector<std::array<std::string, 5>> src)
+void InstructionWindow::set(std::vector<std::array<std::string, 4>> src)
 {
   content=src;
   listview.clear();
@@ -284,7 +294,7 @@ void TextWindow::append(const finalcut::FString& str)
 
 std::string TextWindow::get()
 {
-  return scrolltext.getText().toString () ;
+  return scrolltext.getText().toString() ;
 }
 
 void TextWindow::set(const finalcut::FString& str)
@@ -316,18 +326,18 @@ void TextWindow::adjustSize()
 // Classe Desassembler
 //----------------------------------------------------------------------
 
-Desassembler::Desassembler(TextWindow *log) : log(log)
+Desassembler::Desassembler(Menu *widget) : widget(widget)
 {
     try
     {
         err = cs_open(CS_ARCH_X86, CS_MODE_16, &handle);
         if (err != CS_ERR_OK) 
             throw Error("Désassembleur - initialisation....................[ERREUR]");
-        log->append("Désassembleur - initialisation....................[  OK  ]");
+        widget->log.append("Désassembleur - initialisation....................[  OK  ]");
     }
     catch(exception const& e)
     {
-       log->append(e.what());
+       widget->log.append(e.what());
     }
 }
 
@@ -341,7 +351,7 @@ void Desassembler::Desassemble(uint8_t *content, uint32_t address,uint32_t size,
             throw Error("Désassembleur - désassemblage.....................[ERREUR]");
         else
         {  
-            if (debug) log->append("Désassemblage - désassemblage.....................[ "+to_string(srcsize)+"l ]");
+            if (debug) widget->log.append("Désassemblage - désassemblage.....................[ "+to_string(srcsize)+"l ]");
             unasm->src.clear();
             unasm->pos.clear();
 		    for (size_t j = 0; j < srcsize; j++)
@@ -352,7 +362,7 @@ void Desassembler::Desassemble(uint8_t *content, uint32_t address,uint32_t size,
                 std::string adresse = intToHexString((int)insn[j].address, 8);  
 		        std::string *menmonic = new std::string((char *)insn[j].mnemonic);
 		        std::string *op_str = new std::string((char *)insn[j].op_str);
-		        std::array<std::string, 5> *array = new  std::array<std::string, 5>{"", adresse, *bytes, *menmonic, *op_str};
+		        std::array<std::string, 4> *array = new  std::array<std::string, 4>{adresse, *bytes, *menmonic, *op_str};
 		        unasm->src.push_back(*array);
 		        unasm->pos.push_back(insn[j].address);
             }
@@ -363,7 +373,7 @@ void Desassembler::Desassemble(uint8_t *content, uint32_t address,uint32_t size,
     {
        unasm->src.clear();
        unasm->pos.clear();
-       log->append(e.what());
+       widget->log.append(e.what());
     }
 
 }
@@ -372,18 +382,18 @@ void Desassembler::Desassemble(uint8_t *content, uint32_t address,uint32_t size,
 // Classe Assembler
 //----------------------------------------------------------------------
 
-Assembler::Assembler(TextWindow *log) : log(log)
+Assembler::Assembler(Menu *widget) : widget(widget)
 {
     try
     {
         err = ks_open(KS_ARCH_X86, KS_MODE_16, &ks);
         if (err != KS_ERR_OK) 
             throw Error("Assembleur - initialisation.......................[ERREUR]");
-        log->append("Assembleur - initialisation.......................[  OK  ]");
+        widget->log.append("Assembleur - initialisation.......................[  OK  ]");
     }
     catch(exception const& e)
     {
-       log->append(e.what());
+       widget->log.append(e.what());
     }
     ks_option(ks, KS_OPT_SYNTAX, KS_OPT_SYNTAX_NASM);
 }
@@ -426,13 +436,13 @@ std::vector<Code> Assembler::MultiAssemble(std::string source,uint32_t address)
             mcode.push_back(*code);
         for(size_t i=0;i<mcode.size();i++)
             this->Assemble(&mcode[i]);
-        log->append("Assembleur - assemblage...........................[  OK  ]");
+        widget->log.append("Assembleur - assemblage...........................[  OK  ]");
         return mcode;
      }
     catch(exception const& e)
     {
        std::vector<Code> mcode;
-       log->append(e.what());
+       widget->log.append(e.what());
        return mcode;
     }
 
@@ -449,7 +459,7 @@ void Assembler::Assemble(Code *code)
         code->size=0;
         code->assembled=false;
         code->loaded=false;
-        throw Error("Assembleur - assemblage...........................[ERREUR]");
+        throw Error("Assembleur - assemblage...........................[ERREUR]\n  Nombre:"+to_string(srcsize)+"\n  Erreur:"+std::string(ks_strerror(ks_errno(ks))));
     }
     else
         code->assembled=true;
@@ -459,7 +469,7 @@ void Assembler::Assemble(Code *code)
 // Classe VMEngine
 //----------------------------------------------------------------------
 
-VMEngine::VMEngine(TextWindow *log) : log(log)
+VMEngine::VMEngine(Menu *widget) : widget(widget)
 {
     code=new uint8_t[500];
     Init();
@@ -623,25 +633,26 @@ void VMEngine::Init()
 {
     try
     {
+        hadcall=0;
         err = uc_open(UC_ARCH_X86, UC_MODE_16, &uc);
         if (err != UC_ERR_OK)
             throw Error("VM IA86 - initilisation...........................[ERREUR]");
-        log->append("VM IA86 - initilisation...........................[  OK  ]");
+        widget->log.append("VM IA86 - initilisation...........................[  OK  ]");
     }
     catch(exception const& e)
     {
-        log->append(e.what());
+        widget->log.append(e.what());
     }
 }
 
 bool VMEngine::isExecuted()
 {
-    return this->executed;
+    return executed;
 }
 
 bool VMEngine::isInitialized()
 {
-    return this->initialized;
+    return initialized;
 }
 
 void VMEngine::Close()
@@ -651,31 +662,17 @@ void VMEngine::Close()
 
 void VMEngine::Halt()
 {
-    if (this->executed)
-        log->append("VM IA86 - arret...................................[ INFO ]");
-   this->executed=false;
+    if (executed)
+        widget->log.append("VM IA86 - arret...................................[ INFO ]");
+   executed=false;
 }
 
 void VMEngine::Unconfigure()
 {
    this->Halt();
-    if (this->initialized)
-        log->append("VM IA86 - déconfiguration.........................[ INFO ]");
-   this->initialized=false;
-}
-
-uint32_t VMEngine::getNextInstr()
-{
-    uint32_t now=getEIP();
-    bool flag=false;
-    for(int pos: unasm.pos)
-    {
-       if (pos==now)
-          flag=true;
-       else if (flag)
-          return pos;
-    }
-    return 0;
+    if (initialized)
+        widget->log.append("VM IA86 - déconfiguration.........................[ INFO ]");
+   initialized=false;
 }
 
 std::string VMEngine::getRam(int segment, int address,int lines, int linesize)
@@ -708,7 +705,7 @@ std::string VMEngine::getRam(int segment, int address,int lines, int linesize)
     return result;
 }
 
-std::vector<std::array<std::string, 5>> VMEngine::getInstr(int segment, int address,int size)
+std::vector<std::array<std::string, 4>> VMEngine::getInstr(int segment, int address,int size)
 {   
     uint32_t realaddress=segment*16+address;
     if (realaddress<bufferaddress || realaddress+(size*7)>bufferaddress+500)
@@ -743,10 +740,10 @@ std::vector<std::array<std::string, 5>> VMEngine::getInstr(int segment, int addr
     int last=first+size;
     marker=0;
     std::string reference=intToHexString(address, 8);
-    std::vector<std::array<std::string, 5>> result = {unasm.src.begin()+first,unasm.src.begin()+last};
-    for(std::array<std::string, 5> item: result)
+    std::vector<std::array<std::string, 4>> result = {unasm.src.begin()+first,unasm.src.begin()+last};
+    for(std::array<std::string, 4> item: result)
     {
-        if (item[1]==reference)
+        if (item[0]==reference)
             break;
         marker++;
     }
@@ -758,7 +755,64 @@ int VMEngine::getLine()
 {
     return marker;
 }
+    
+//----------------------------------------------------------------------
+// Hook
+//----------------------------------------------------------------------
+    
 
+static void hook_int(uc_engine *uc, uint32_t intno, void *user_data)
+{
+    ((Menu *)user_data)->tolog("INT "+to_string(intno));
+}
+
+static void hook_code (uc_engine *uc, uint64_t address, uint32_t size, void *user_data)
+{
+   if (!ok) 
+    {
+        ok=true;
+        return;
+    }
+    uint8_t code[2];
+    uc_err err = uc_mem_read(uc, address, &code, 2);
+    if (err) 
+        throw Error("VM IA86 - hook instructions.......................[ERREUR]");
+    //((Menu *)user_data)->tolog(intToHexString(code[0],2));
+    //((Menu *)user_data)->tolog(intToHexString(code[1],2));
+    if (code[0]==0xF4)      
+        executed=false;
+    else if (step && (code[0]==0xE8 || code[0]==0xFF || code[0]==0x9A || (code[0]==0x66 && (code[1]==0xE8 || code[1]==0xFF || code[1]==0x9A))))
+        hadcall=address+size;
+    else if (!step || (hadcall>0 && !call)) return;
+    uc_emu_stop(uc);
+}
+
+static void hook_call(uc_engine *uc, uint32_t intno, void *user_data)
+{
+    ((Menu *)user_data)->tolog("SYSCALL");
+}
+
+
+static void hook_memory_write(uc_engine *uc, uc_mem_type type, uint64_t address, int size, int64_t value, void *user_data)
+{
+    switch (type)
+    {
+    case UC_MEM_WRITE:
+        if ((address>=0xB8000) && (address<=0xB8000+80*25*2))
+        {
+               uint16_t offset=address-0xB8000;
+               uint16_t y=(int)(offset/(80*2));
+               uint16_t x=offset%(80*2);
+               char achar;
+               if (std::isprint(value))
+                    achar=(char)value;
+               else
+                    achar='.';
+               if ((size==1) && (x%2==0))
+                    ((Menu *)user_data)->SetScreen(x/2,y,achar);
+        }
+    }
+}
 void VMEngine::Configure(State *init, std::string code)
 {
     try
@@ -771,31 +825,35 @@ void VMEngine::Configure(State *init, std::string code)
         Close();
         Init();
         bufferaddress=-666;
-        this->initialized=false;
-        this->executed=false;
-        //log->append("Mappage de la mémoire virtuelle");
+        initialized=false;
+        executed=false;
+        //widget->log.append("Mappage de la mémoire virtuelle");
         uc_mem_map(uc, 0, 1 * 1024 * 1024, UC_PROT_ALL);
+        uc_hook_add(uc, &uh_call, UC_HOOK_INSN, (void*)hook_call, (void*)widget, 1, 0, UC_X86_INS_SYSCALL);
+        uc_hook_add(uc, &uh_mem, UC_HOOK_MEM_WRITE, (void*)hook_memory_write, (void*)widget, 1, 0);
+        uc_hook_add(uc, &uh_code, UC_HOOK_CODE, (void*)hook_code, (void*)widget, 1, 0);
+        uc_hook_add(uc, &uh_int, UC_HOOK_INTR, (void*)hook_int, (void*)widget, 1, 0);
         for(size_t i=0;i<mcode.size();i++)
         {
            if (mcode[i].assembled) 
                 SetMem(&mcode[i]);
            else     
                 throw Error("VM IA86 - code non assemblé...................[ERREUR]");
-           if (debug) log->append("Section N°"+std::to_string(i)+" : "+intToHexString(mcode[i].address,8)+" -> "+to_string(mcode[i].size)+" octets");
+           if (debug) widget->log.append("Section N°"+std::to_string(i)+" : "+intToHexString(mcode[i].address,8)+" -> "+to_string(mcode[i].size)+" octets");
         }
         status=verify();
         if (status==0)
         {
-            this->initialized=true;
+            initialized=true;
             SetRegs(init);   
         }
         else
-            this->initialized=false;
+            initialized=false;
     }
     catch(exception const& e)
     {
-        log->append(e.what());
-        this->initialized=false;
+        widget->log.append(e.what());
+        initialized=false;
     }
 }
 
@@ -964,36 +1022,41 @@ void VMEngine::SetRegs(State *init)
                 out << " AX=" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << init->dump.regs.ax << " ";               
             else
                 out << "EAX=" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << init->dump.regs.eax << " ";               
-        log->append(out.str());
+        widget->log.append(out.str());
 }
 
-void VMEngine::Run(uint32_t end,uint64_t timeout)
+void VMEngine::Run(bool astep, bool acall, uint64_t timeout)
 {
     try
     {
-        if (verify()==0 && this->initialized)
+        if (verify()==0 && initialized)
         {
-            err=uc_emu_start(uc, this->getCurrent(), end, timeout, 0);
+            ok=false;
+            step=astep;
+            call=acall;
+            if (hadcall==0)
+                err=uc_emu_start(uc, this->getCurrent(), 0xFFFFFFFF, timeout, 0);
+            else
+            {
+                err=uc_emu_start(uc, this->getCurrent(), hadcall, timeout, 0);
+                hadcall=0;
+            }
             if (err) 
                 throw Error("VM IA86 - execution...............................[ERREUR]");
             else
             {
-                if (!this->executed)
-                log->append("VM IA86 - execution...............................[ INFO ]");
-                this->executed="true";
+                if (!executed)
+                widget->log.append("VM IA86 - execution...............................[ INFO ]");
+                executed="true";
             }
         }
    }
    catch(exception const& e)
    {
         this->Halt();
-        log->append(e.what());
+        widget->log.append(e.what());
    }
 }
-
-//----------------------------------------------------------------------
-// Classe 
-//----------------------------------------------------------------------
 
 //----------------------------------------------------------------------
 // Classe Menu
@@ -1090,7 +1153,7 @@ void Menu::initWindows()
 }
 
 // Level  1 : IP AL
-// Level  2 : IP AX
+// Level  2 : I:P AX
 // Level  3 : IP AX BX CX DX
 // Level  4 : IP AX BX CX DX FLAGS
 // Level  5 : IP AX BX CX DX FLAGS SI DI
@@ -1112,7 +1175,7 @@ void Menu::AdjustWindows()
   stack.setGeometry ( FPoint { 43, 01 }, FSize{15, 15} );
   mem.setGeometry ( FPoint { 77, 01 }, FSize{108, 15} );
   tuto.setGeometry ( FPoint { 125, 45 }, FSize{60, 11} );
-  screen.setGeometry ( FPoint { 105, 18 }, FSize{80, 25} );
+  screen.setGeometry ( FPoint { 103, 16 }, FSize{82, 28} );
   debug.setGeometry ( FPoint { 42, 17 }, FSize{60, 27} );
   scenar.setGeometry ( FPoint { 187, 01 }, FSize{25, 55} );
   this->hide();
@@ -1165,6 +1228,26 @@ void Menu::initMenus()
   End.addAccelerator (FKey::F6);
   End.setStatusbarMessage ("Termine le programme et remet à zéro la machine IA86");
   About.setStatusbarMessage ("A propos de IA86"); 
+}
+
+void Menu::ClearScreen()
+{
+    std::string empty="";
+    for(int i=0;i<80*25;i++)
+    {
+       if ((i%80==0) && i!=0)
+        empty+="\n";
+       empty+="X";
+    }
+    screen.set(empty);
+}
+
+void Menu::SetScreen(uint16_t x, uint16_t y, char value)
+{
+    std::string temp=screen.get();
+    if (x<25 && y<80)
+        temp[x+y*81]=value;
+    screen.set(temp);
 }
 
 void Menu::onTimer (finalcut::FTimerEvent* ev)
@@ -1284,7 +1367,13 @@ void Menu::end()
 void Menu::compile()
 {
     vm.Configure(&scenario.levels[scenar.getselected()].init,edit.get());
+    ClearScreen();
     showInstr();
+}
+
+void Menu::tolog(std::string str)
+{
+    log.append(str);
 }
 
 void Menu::about()
@@ -1366,7 +1455,7 @@ void Menu::exec()
 {
   if (!vm.isInitialized())
     compile();
-   vm.Run(0xFFFF,0);
+   vm.Run(false,false,0);
    showInstr();
 }
 
@@ -1374,7 +1463,7 @@ void Menu::trace()
 {
   if (!vm.isInitialized())
     compile();
-  vm.Run(vm.getNextInstr(),0);
+  vm.Run(true,false,0);
   showInstr();
 }
 
@@ -1382,7 +1471,7 @@ void Menu::step()
 {
   if (!vm.isInitialized())
     compile(); 
-  vm.Run(vm.getNextInstr(),0);
+  vm.Run(true,true,0);
   showInstr();
 }
 

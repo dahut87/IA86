@@ -139,7 +139,7 @@ struct Code
 
 struct Unasm
 {
-    std::vector<std::array<std::string, 5>> src;
+    std::vector<std::array<std::string, 4>> src;
     std::vector<uint32_t> pos;
 };
 
@@ -199,14 +199,14 @@ class InstructionWindow final : public finalcut::FDialog
     // Disable copy assignment operator (=)
     InstructionWindow& operator = (const InstructionWindow&) = delete;
     // Method
-    std::vector<std::array<std::string, 5>> get();
-    void set(std::vector<std::array<std::string, 5>> src);
+    std::vector<std::array<std::string, 4>> get();
+    void set(std::vector<std::array<std::string, 4>> src);
     void clear();
     void setmark(int index);
     int getsize();
   private:
     // Method
-    std::vector<std::array<std::string, 5>> content;
+    std::vector<std::array<std::string, 4>> content;
     void initLayout() override;
     void adjustSize() override;
     // Data members
@@ -263,50 +263,51 @@ class TextWindow final : public finalcut::FDialog
     finalcut::FTextView scrolltext{this};
 };
 
+class Menu;
+
 class Desassembler
 {
   public:
-    Desassembler(TextWindow *log);
+    Desassembler(Menu *widget);
     void Desassemble(uint8_t *content, uint32_t address,uint32_t size, Unasm *unasm);
   private:
     csh handle;
     cs_insn *insn;
     int err;
-    TextWindow *log;
+    Menu *widget;
     TextEditWindow *edit;
     size_t srcsize;
     size_t codesize;
-    std::vector<std::array<std::string, 5>> src;
+    std::vector<std::array<std::string, 4>> src;
     unsigned char *src_char = new unsigned char[64*1024];
 };
 
 class Assembler
 {
   public:
-    Assembler(TextWindow *log);
+    Assembler(Menu *widget);
     void Assemble(Code *code);
     std::vector<Code> MultiAssemble(std::string source,uint32_t address);
   private:
     ks_engine *ks;
     ks_err err;
     int err2;
-    TextWindow *log;
+    Menu *widget;
     TextEditWindow *edit;
 };
 
 class VMEngine
 {
   public:
-    VMEngine(TextWindow *log);
+    VMEngine(Menu *widget);
     void Configure(State *init, std::string code);
     void Halt();
     void Unconfigure();
-    uint32_t getNextInstr();
     uint32_t getCurrent();
-    void Run(uint32_t end,uint64_t timeout);
+    void Run(bool astep, bool acall, uint64_t timeout);
     std::string getFlags();
     std::string getRegs();
-    std::vector<std::array<std::string, 5>>  getInstr(int segment, int address,int size);
+    std::vector<std::array<std::string, 4>>  getInstr(int segment, int address,int size);
     void SetMem(Code *code);
     void SetRegs(State *init);
     std::string getRam(int segment, int address,int lines, int linesize);
@@ -314,6 +315,7 @@ class VMEngine
     bool isExecuted();
     bool isInitialized();
     void setRights(int rights);
+    void ClearScreen();
     int getLine();
     uint32_t getEIP();
     uint16_t getCS();
@@ -324,8 +326,6 @@ class VMEngine
     int rights;
     void Init();
     void Close();
-    bool executed=false;
-    bool initialized=false;
     uc_engine *uc;
     uc_err err;
     int bufferaddress;
@@ -333,9 +333,9 @@ class VMEngine
     uint8_t *code;
     uLong crc,crc_old;
     std::vector<Code> mcode;
-    TextWindow *log;
-    Assembler asmer{log};
-    Desassembler unasmer{log};
+    Menu *widget;
+    Assembler asmer{widget};
+    Desassembler unasmer{widget};
 };
 
 class Menu final : public finalcut::FDialog
@@ -351,6 +351,8 @@ class Menu final : public finalcut::FDialog
     Menu& operator = (const Menu&) = delete;
      // Methods
     void loadLevel();
+    void tolog(std::string str);
+    void SetScreen(uint16_t x, uint16_t y, char value);
     TextWindow               log{this};
   private:
     void onTimer (finalcut::FTimerEvent*) override;
@@ -370,6 +372,7 @@ class Menu final : public finalcut::FDialog
     void about();
     void mini();
     void maxi();
+    void ClearScreen();
     void AdjustWindows();
     void initWindows();
     void initLayout() override;
@@ -415,7 +418,7 @@ class Menu final : public finalcut::FDialog
     TextWindow               screen{this};
     TextEditWindow           edit{this};
     ScenarioWindow           scenar{this};
-    VMEngine                 vm{&log};
+    VMEngine                 vm{this};
 };
 
 
