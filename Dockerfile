@@ -41,7 +41,7 @@ WORKDIR /usr/src/struct_mapping/build
 RUN cmake .. && cmake --build . && cmake --install .
 
 WORKDIR /usr/src/
-RUN git clone https://github.com/dahut87/finalcut.git
+RUN git clone https://github.com/dahut87/finalcut.git 
 WORKDIR /usr/src/finalcut
 RUN autoreconf --install --force && ./configure --prefix=/usr && make && make install
 

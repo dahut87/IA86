@@ -63,20 +63,8 @@ void mapping()
     struct_mapping::reg(&i386_regs::eip, "eip"); 
 }
 
-Scenario readscenario(std::string filename) {
-   
-    std::ifstream inFile;
-    inFile.open(filename);
-    std::stringstream strStream;
-    strStream << inFile.rdbuf();
-    std::string json=strStream.str();
-    std::istringstream json_data(json);
-    Scenario scenar;
-    struct_mapping::map_json_to_struct(scenar, json_data);
-    return scenar;
-}
-
 Scenario scenario;
+Level level;
 Unasm unasm;
 int marker;
 bool debug=true;
@@ -110,37 +98,24 @@ ScenarioWindow::ScenarioWindow (finalcut::FWidget* parent)
   );
 }
 
-bool ScenarioWindow::load(std::string file)
-{
-   scenario=readscenario(file);
-   if (scenario.levels.size()>0) 
-    {
-        std::vector<std::string> items;
-      for(size_t i=0; i < scenario.levels.size(); i++)
-      {
-        //((Menu*)this->getParent())->log.append(".");
-        items.clear();
-        items.push_back(to_string(i));
-        items.push_back(scenario.levels[i].title);
-        const finalcut::FStringList line (items.begin(), items.end());    
-        listview.insert (line);
-      }
-      return true;
-    }
-    else
-        return false;
-}
-
 void ScenarioWindow::click()
 {
-    selected=listview.getindex();
-    ((Menu*)this->getParent())->loadLevel();
+    ((Menu*)this->getParent())->loadLevel(listview.getindex());
 }
 
-int ScenarioWindow::getselected()
+void ScenarioWindow::Load(std::vector<Level> levels)
 {
-    return selected;
-}
+    vector<std::string> items;
+    for(size_t i=0; i < levels.size(); i++)
+    {
+        //((Menu*)this->getParent())->tolog(".");
+        items.clear();
+        items.push_back(to_string(i));
+        items.push_back(levels[i].title);
+        const finalcut::FStringList line (items.begin(), items.end());    
+        listview.insert(line);
+    }
+} 
 
 void ScenarioWindow::initLayout()
 {
@@ -309,7 +284,6 @@ void TextWindow::clear()
   scrolltext.clear();
 }
 
-
 void TextWindow::initLayout()
 {
   scrolltext.setGeometry (FPoint{1, 2}, FSize{getWidth(), getHeight() - 1});
@@ -333,11 +307,11 @@ Desassembler::Desassembler(Menu *widget) : widget(widget)
         err = cs_open(CS_ARCH_X86, CS_MODE_16, &handle);
         if (err != CS_ERR_OK) 
             throw Error("Désassembleur - initialisation....................[ERREUR]");
-        widget->log.append("Désassembleur - initialisation....................[  OK  ]");
+        widget->tolog("Désassembleur - initialisation....................[  OK  ]");
     }
     catch(exception const& e)
     {
-       widget->log.append(e.what());
+       widget->tolog(e.what());
     }
 }
 
@@ -351,7 +325,7 @@ void Desassembler::Desassemble(uint8_t *content, uint32_t address,uint32_t size,
             throw Error("Désassembleur - désassemblage.....................[ERREUR]");
         else
         {  
-            if (debug) widget->log.append("Désassemblage - désassemblage.....................[ "+to_string(srcsize)+"l ]");
+            if (debug) widget->tolog("Désassemblage - désassemblage.....................[ "+to_string(srcsize)+"l ]");
             unasm->src.clear();
             unasm->pos.clear();
 		    for (size_t j = 0; j < srcsize; j++)
@@ -373,7 +347,7 @@ void Desassembler::Desassemble(uint8_t *content, uint32_t address,uint32_t size,
     {
        unasm->src.clear();
        unasm->pos.clear();
-       widget->log.append(e.what());
+       widget->tolog(e.what());
     }
 
 }
@@ -389,11 +363,11 @@ Assembler::Assembler(Menu *widget) : widget(widget)
         err = ks_open(KS_ARCH_X86, KS_MODE_16, &ks);
         if (err != KS_ERR_OK) 
             throw Error("Assembleur - initialisation.......................[ERREUR]");
-        widget->log.append("Assembleur - initialisation.......................[  OK  ]");
+        widget->tolog("Assembleur - initialisation.......................[  OK  ]");
     }
     catch(exception const& e)
     {
-       widget->log.append(e.what());
+       widget->tolog(e.what());
     }
     ks_option(ks, KS_OPT_SYNTAX, KS_OPT_SYNTAX_NASM);
 }
@@ -436,13 +410,13 @@ std::vector<Code> Assembler::MultiAssemble(std::string source,uint32_t address)
             mcode.push_back(*code);
         for(size_t i=0;i<mcode.size();i++)
             this->Assemble(&mcode[i]);
-        widget->log.append("Assembleur - assemblage...........................[  OK  ]");
+        widget->tolog("Assembleur - assemblage...........................[  OK  ]");
         return mcode;
      }
     catch(exception const& e)
     {
        std::vector<Code> mcode;
-       widget->log.append(e.what());
+       widget->tolog(e.what());
        return mcode;
     }
 
@@ -637,11 +611,11 @@ void VMEngine::Init()
         err = uc_open(UC_ARCH_X86, UC_MODE_16, &uc);
         if (err != UC_ERR_OK)
             throw Error("VM IA86 - initilisation...........................[ERREUR]");
-        widget->log.append("VM IA86 - initilisation...........................[  OK  ]");
+        widget->tolog("VM IA86 - initilisation...........................[  OK  ]");
     }
     catch(exception const& e)
     {
-        widget->log.append(e.what());
+        widget->tolog(e.what());
     }
 }
 
@@ -663,7 +637,7 @@ void VMEngine::Close()
 void VMEngine::Halt()
 {
     if (executed)
-        widget->log.append("VM IA86 - arret...................................[ INFO ]");
+        widget->tolog("VM IA86 - arret...................................[ INFO ]");
    executed=false;
 }
 
@@ -671,7 +645,7 @@ void VMEngine::Unconfigure()
 {
    this->Halt();
     if (initialized)
-        widget->log.append("VM IA86 - déconfiguration.........................[ INFO ]");
+        widget->tolog("VM IA86 - déconfiguration.........................[ INFO ]");
    initialized=false;
 }
 
@@ -755,6 +729,38 @@ int VMEngine::getLine()
 {
     return marker;
 }
+
+void VMEngine::clearbreakpoints()
+{
+    breakpoints.clear();
+}
+
+void VMEngine::addbreakpoint(int address)
+{
+    for(int item: breakpoints)
+        if (item==address) return;
+    breakpoints.push_back(address);
+}
+
+void VMEngine::removebreakpoint(int address)
+{
+    int i=0;
+    for(int item: breakpoints)
+        if (item==address)
+        {
+            breakpoints.erase(breakpoints.begin()+i);
+            return;
+        }    
+}
+
+std::vector<int> VMEngine::getBreapoints()
+{
+    std::vector<int> list;
+    for(int item: breakpoints)
+        widget->tolog(to_string(item)); 
+    return list;
+}
+ 
     
 //----------------------------------------------------------------------
 // Hook
@@ -824,10 +830,11 @@ void VMEngine::Configure(State *init, std::string code)
             return;
         Close();
         Init();
-        bufferaddress=-666;
+        bufferaddress=-1;
         initialized=false;
         executed=false;
-        //widget->log.append("Mappage de la mémoire virtuelle");
+        hadcall=0x0;
+        //widget->tolog("Mappage de la mémoire virtuelle");
         uc_mem_map(uc, 0, 1 * 1024 * 1024, UC_PROT_ALL);
         uc_hook_add(uc, &uh_call, UC_HOOK_INSN, (void*)hook_call, (void*)widget, 1, 0, UC_X86_INS_SYSCALL);
         uc_hook_add(uc, &uh_mem, UC_HOOK_MEM_WRITE, (void*)hook_memory_write, (void*)widget, 1, 0);
@@ -839,7 +846,7 @@ void VMEngine::Configure(State *init, std::string code)
                 SetMem(&mcode[i]);
            else     
                 throw Error("VM IA86 - code non assemblé...................[ERREUR]");
-           if (debug) widget->log.append("Section N°"+std::to_string(i)+" : "+intToHexString(mcode[i].address,8)+" -> "+to_string(mcode[i].size)+" octets");
+           if (debug) widget->tolog("Section N°"+std::to_string(i)+" : "+intToHexString(mcode[i].address,8)+" -> "+to_string(mcode[i].size)+" octets");
         }
         status=verify();
         if (status==0)
@@ -852,7 +859,7 @@ void VMEngine::Configure(State *init, std::string code)
     }
     catch(exception const& e)
     {
-        widget->log.append(e.what());
+        widget->tolog(e.what());
         initialized=false;
     }
 }
@@ -1022,7 +1029,7 @@ void VMEngine::SetRegs(State *init)
                 out << " AX=" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << init->dump.regs.ax << " ";               
             else
                 out << "EAX=" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << init->dump.regs.eax << " ";               
-        widget->log.append(out.str());
+        widget->tolog(out.str());
 }
 
 void VMEngine::Run(bool astep, bool acall, uint64_t timeout)
@@ -1046,7 +1053,7 @@ void VMEngine::Run(bool astep, bool acall, uint64_t timeout)
             else
             {
                 if (!executed)
-                widget->log.append("VM IA86 - execution...............................[ INFO ]");
+                widget->tolog("VM IA86 - execution...............................[ INFO ]");
                 executed="true";
             }
         }
@@ -1054,7 +1061,7 @@ void VMEngine::Run(bool astep, bool acall, uint64_t timeout)
    catch(exception const& e)
    {
         this->Halt();
-        widget->log.append(e.what());
+        widget->tolog(e.what());
    }
 }
 
@@ -1065,70 +1072,21 @@ void VMEngine::Run(bool astep, bool acall, uint64_t timeout)
 Menu::Menu (finalcut::FWidget* parent)
   : finalcut::FDialog{parent}
 {
-  initNow();
-}
-
-void Menu::initNow()
-{
   initWindows();
   initMisc();
   initMenus();
   initMenusCallBack();
-  initCore();
-}
-
-void Menu::initCore()
-{
-  addTimer (50);
-  if (scenar.load("./scenarios.json"))
-  {
-    log.append("Application - charge scénarios....................[  OK  ]");
-    log.append("-={ "+ scenario.title+" }=-");
-    if (scenario.levels.size()>0)
-        loadLevel();
-    maxi();
-  }
-  else
-  {
-    vm.Unconfigure();
-    log.append("Application - charge scénarios....................[ERREUR]");
-    mini();
-  }
-}
-
-void Menu::mini()
-{
-  this->hide();
-  flags.hide();
-  stack.hide();
-  mem.hide();
-  screen.hide();
-  log.show();
-  edit.hide();
-  view.hide();
-  regs.hide();
-  tuto.hide();
-  debug.hide();
-  scenar.hide();
-  Options.hide();
-  Tools.hide();
-  Window.hide();
-  Debug.hide();
-}
-
-void Menu::maxi()
-{
-    Options.show();
-    Tools.show();
-    Window.show();
-    Debug.show();
+  loadScenario("./scenarios.json");
+  addTimer(50);
 }
 
 void Menu::initWindows()
 {
-  log.setText ("Journaux");
-  log.setResizeable();
-  log.show();
+  this->setText ("Journaux");
+  this->show(); 
+  info.setText ("Informations");
+  info.setResizeable();
+  info.show(); 
   edit.setText ("Code source");
   edit.setResizeable();
   edit.show();
@@ -1148,7 +1106,6 @@ void Menu::initWindows()
   debug.setResizeable();
   debug.show();
   scenar.setText ("Scénarios");
-  scenar.setResizeable();
   scenar.show();
 }
 
@@ -1167,7 +1124,7 @@ void Menu::initWindows()
 
 void Menu::AdjustWindows()
 {
-  log.setGeometry ( FPoint { 63, 45 }, FSize{60, 11} );
+  this->setGeometry ( FPoint { 63, 45 }, FSize{60, 11} );
   edit.setGeometry ( FPoint { 01, 17 }, FSize{39, 27} );
   view.setGeometry ( FPoint { 01, 45 }, FSize{60, 11} );
   regs.setGeometry ( FPoint { 01, 01 }, FSize{40, 15} );
@@ -1178,26 +1135,50 @@ void Menu::AdjustWindows()
   screen.setGeometry ( FPoint { 103, 16 }, FSize{82, 28} );
   debug.setGeometry ( FPoint { 42, 17 }, FSize{60, 27} );
   scenar.setGeometry ( FPoint { 187, 01 }, FSize{25, 55} );
-  this->hide();
+  info.setGeometry (FPoint { 55, 25 }, FSize{50, 14});
+  this->show();
+  info.hide();
   flags.hide();
   stack.hide();
   mem.hide();
   screen.hide();
-  log.show();
-  edit.show();
-  view.show();
-  regs.show();
-  tuto.show();
-  debug.show();
-  scenar.show();
-  if (scenario.levels[scenar.getselected()].rights > 3)
-        flags.show();
-  if (scenario.levels[scenar.getselected()].rights > 5)
-        stack.show();
-  if (scenario.levels[scenar.getselected()].rights > 2)
-        mem.show();
-  if (scenario.levels[scenar.getselected()].rights > 6)
-        screen.show();              
+  if (scenario.loaded)
+  {
+      info.show();
+      edit.show();
+      view.show();
+      regs.show();
+      tuto.show();
+      debug.show();
+      scenar.show();
+      if (level.rights > 3)
+            flags.show();
+      if (level.rights > 5)
+            stack.show();
+      if (level.rights > 2)
+            mem.show();
+      if (level.rights > 6)
+            screen.show();
+      Options.setEnable();
+      Tools.setEnable();
+      Window.setEnable();
+      Debug.setEnable();
+      Breakpoint.setEnable();  
+  }
+  else
+  {
+      edit.hide();
+      view.hide();
+      regs.hide();
+      tuto.hide();
+      debug.hide();
+      scenar.hide();
+      Options.setDisable();
+      Tools.setDisable();
+      Window.setDisable();
+      Debug.setDisable();
+      Breakpoint.setDisable();  
+  }
 }
 
 void Menu::initMenus()
@@ -1310,33 +1291,31 @@ void Menu::initMenusCallBack()
 
 void Menu::initMisc()
 {
-  Info << " █████   █████████    ████████    ████████ \n"
-       << "░░███   ███░░░░░███  ███░░░░███  ███░░░░███\n"
-       << " ░███  ░███    ░███ ░███   ░███ ░███   ░░░ \n"
-       << " ░███  ░███████████ ░░████████  ░█████████ \n"
-       << " ░███  ░███░░░░░███  ███░░░░███ ░███░░░░███\n"
-       << " ░███  ░███    ░███ ░███   ░███ ░███   ░███\n"
-       << " █████ █████   █████░░████████  ░░████████ \n"
-       << "░░░░░ ░░░░░   ░░░░░  ░░░░░░░░    ░░░░░░░░  \n"
-       << "THE EVEN MORE PEDAGOGICAL SYSTEM !!\n"
-       << "\n"
-       << "Episode 1 : Apprendre l'assembleur X86";
+  info.set("\
+ █████   █████████    ████████    ████████ \n\
+░░███   ███░░░░░███  ███░░░░███  ███░░░░███\n\
+ ░███  ░███    ░███ ░███   ░███ ░███   ░░░ \n\
+ ░███  ░███████████ ░░████████  ░█████████ \n\
+ ░███  ░███░░░░░███  ███░░░░███ ░███░░░░███\n\
+ ░███  ░███    ░███ ░███   ░███ ░███   ░███\n\
+ █████ █████   █████░░████████  ░░████████ \n\
+░░░░░ ░░░░░   ░░░░░  ░░░░░░░░    ░░░░░░░░  \n\
+THE EVEN MORE PEDAGOGICAL SYSTEM !!\n\
+\n\
+Episode 1 : Apprendre l'assembleur X86");
     Statusbar.setMessage("THE EVEN MORE PEDAGOGICAL SYSTEM !!");
 }
 
 void Menu::initLayout()
 {
-  Info.setGeometry(FPoint{2, 1}, FSize{43, 12});
+  Log.setGeometry (FPoint{1, 2}, FSize{getWidth(), getHeight() - 1});
   FDialog::initLayout();
 }
 
 void Menu::adjustSize()
 {
-  const auto pw = int(getDesktopWidth());
-  const auto ph = int(getDesktopHeight());
-  setX (1 + (pw - int(getWidth())) / 2, false);
-  setY (1 + (ph - int(getHeight())) / 4, false);
   finalcut::FDialog::adjustSize();
+  Log.setGeometry (FPoint{1, 2}, FSize(getWidth(), getHeight() - 1));
 }
 
 void Menu::onClose (finalcut::FCloseEvent* ev)
@@ -1344,18 +1323,51 @@ void Menu::onClose (finalcut::FCloseEvent* ev)
   finalcut::FApplication::closeConfirmationDialog (this, ev);
 }
 
-void Menu::loadLevel()
+void Menu::closeLevel()
 {
   vm.Unconfigure();
-  log.append("Application - charge niveau.......................[ INFO ]");
-  view.setText("Objectif: "+scenario.levels[scenar.getselected()].title);
+  AdjustWindows();
+}
+
+void Menu::loadScenario(std::string file)
+{
+
+   scenario.loaded=false;
+   std::ifstream inFile;
+   inFile.open(file);
+   std::stringstream strStream;
+   strStream << inFile.rdbuf();
+   std::string json=strStream.str();
+   std::istringstream json_data(json);
+   struct_mapping::map_json_to_struct(scenario, json_data);
+   if (scenario.levels.size()>0) 
+   {
+      scenar.Load(scenario.levels);
+      scenario.loaded=true;
+      tolog("Application - charge scénarios....................[  OK  ]");
+      tolog("-={ "+ scenario.title+" }=-");
+      loadLevel(0);
+   }
+   else
+   {
+       tolog("Application - charge scénarios....................[ERREUR]");
+       closeLevel();
+   }
+}
+
+void Menu::loadLevel(int alevel)
+{
+  vm.Unconfigure();
+  level=scenario.levels[alevel];
+  tolog("Application - charge niveau.......................[ INFO ]");
+  view.setText("Objectif: "+level.title);
   view.clear();
-  view.append(scenario.levels[scenar.getselected()].description);
+  view.append(level.description);
   tuto.clear();
-  tuto.append(scenario.levels[scenar.getselected()].tutorial);
-  edit.set(scenario.levels[scenar.getselected()].code);
+  tuto.append(level.tutorial);
+  edit.set(level.code);
   debug.clear();
-  vm.setRights(scenario.levels[scenar.getselected()].rights);
+  vm.setRights(level.rights);
   AdjustWindows();
 }
 
@@ -1366,19 +1378,19 @@ void Menu::end()
 
 void Menu::compile()
 {
-    vm.Configure(&scenario.levels[scenar.getselected()].init,edit.get());
+    vm.Configure(&level.init,edit.get());
     ClearScreen();
     showInstr();
 }
 
 void Menu::tolog(std::string str)
 {
-    log.append(str);
+    this->Log.append(str);
 }
 
 void Menu::about()
 {
-  log.hide();
+  this->hide();
   edit.hide();
   view.hide();
   regs.hide();
@@ -1389,9 +1401,8 @@ void Menu::about()
   screen.hide();
   debug.hide();
   scenar.hide();
-  this->show();
-  this->redraw();
-  this->Info.redraw();
+  info.show();
+  info.redraw();
   //((finalcut::FApplication*)this->getParent())->sendQueuedEvents();
   sleep(3);
   AdjustWindows();
@@ -1410,7 +1421,7 @@ void Menu::showInstr()
     }
     catch(exception const& e)
     {
-        log.append(e.what());
+        tolog(e.what());
         vm.Halt();
     }
 }
@@ -1423,6 +1434,7 @@ void Menu::refresh()
     flags.set("Attente...");
     stack.set("Attente...");
     mem.set("En attente d'initialisation...");
+    screen.set("En attente d'initialisation...");
   }
   else
   {
@@ -1433,7 +1445,7 @@ void Menu::refresh()
     }
     catch(exception const& e)
     {
-        log.append(e.what());
+        tolog(e.what());
         vm.Halt();
     }
   }
@@ -1483,13 +1495,9 @@ int main (int argc, char* argv[])
   mapping();
   finalcut::FApplication app {argc, argv};
   Menu main_dlg {&app};
-  main_dlg.setText ("IA86");
-  main_dlg.setSize ({50, 14});
-  main_dlg.setShadow();
-  main_dlg.show();
-  finalcut::FApplication::setDarkTheme();
+  /*main_dlg.setText ("Journaux");
+  main_dlg.setGeometry ( FPoint { 63, 45 }, FSize{60, 11} );
+  main_dlg.show();*/
   finalcut::FWidget::setMainWidget (&main_dlg);
-  //usleep(5 * 1000000);
-  main_dlg.hide();
   return app.exec();
 }

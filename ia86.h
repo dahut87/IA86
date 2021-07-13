@@ -125,6 +125,7 @@ struct Level {
 struct Scenario {
     std::string title;
     std::vector<Level> levels;
+    bool loaded;
 };
 
 struct Code
@@ -175,11 +176,9 @@ class ScenarioWindow final : public finalcut::FDialog
     // Disable copy assignment operator (=)
     ScenarioWindow& operator = (const ScenarioWindow&) = delete;
     // Method
-    int getselected();
-    bool load(std::string file);
+    void Load(std::vector<Level> items);
   private:
     // Method
-    int selected;
     void click();
     void initLayout() override;
     void adjustSize() override;
@@ -315,7 +314,10 @@ class VMEngine
     bool isExecuted();
     bool isInitialized();
     void setRights(int rights);
-    void ClearScreen();
+    void clearbreakpoints();
+    void addbreakpoint(int address);
+    void removebreakpoint(int address);
+    std::vector<int> getBreapoints();
     int getLine();
     uint32_t getEIP();
     uint16_t getCS();
@@ -323,6 +325,7 @@ class VMEngine
     uint16_t getES();
     uint16_t getSS();
   private:
+    std::vector<int> breakpoints;
     int rights;
     void Init();
     void Close();
@@ -350,10 +353,10 @@ class Menu final : public finalcut::FDialog
     // Disable copy assignment operator (=)
     Menu& operator = (const Menu&) = delete;
      // Methods
-    void loadLevel();
+    void loadLevel(int alevel);
+    void closeLevel();
     void tolog(std::string str);
     void SetScreen(uint16_t x, uint16_t y, char value);
-    TextWindow               log{this};
   private:
     void onTimer (finalcut::FTimerEvent*) override;
     void refresh();
@@ -361,17 +364,14 @@ class Menu final : public finalcut::FDialog
     void initMenusCallBack ();
     void initMenus();
     void initMisc();
-    void initNow();
-    void initCore();
     void compile();
     void end();
+    void loadScenario(std::string file);
     void showInstr();
     void exec();
     void trace();
     void step();
     void about();
-    void mini();
-    void maxi();
     void ClearScreen();
     void AdjustWindows();
     void initWindows();
@@ -389,11 +389,11 @@ class Menu final : public finalcut::FDialog
     finalcut::FMenuItem      Line2{&Game};
     finalcut::FMenuItem      Quit{"&Quitter", &Game};
     finalcut::FMenu          Options{"&Options", &Menubar};
-    //finalcut::FMenu          Memory{"&Mémoire", &Options};
-    //finalcut::FRadioMenuItem Ds_esi{"DS:ESI", &Memory};
-    //finalcut::FRadioMenuItem Es_edi{"ES:EDI", &Memory};
-    //finalcut::FRadioMenuItem Cs_eip{"CS:EIP", &Memory};
-    //finalcut::FRadioMenuItem Ss_sp{"SS:SP", &Memory};
+    finalcut::FMenu          Memory{"&Mémoire", &Options};
+    finalcut::FRadioMenuItem Ds_esi{"DS:ESI", &Memory};
+    finalcut::FRadioMenuItem Es_edi{"ES:EDI", &Memory};
+    finalcut::FRadioMenuItem Cs_eip{"CS:EIP", &Memory};
+    finalcut::FRadioMenuItem Ss_sp{"SS:SP", &Memory};
     finalcut::FMenu          Tools{"&Outils", &Menubar};
     finalcut::FMenuItem      Assemble{"&Compilation", &Tools};
     finalcut::FMenuItem      Rearange{"&Ordonne les fenêtres", &Tools};
@@ -402,12 +402,16 @@ class Menu final : public finalcut::FDialog
     finalcut::FMenuItem      End{"&Terminer", &Debug};
     finalcut::FMenuItem      TraceInto{"Pas à pas &détaillé", &Debug}; 
     finalcut::FMenuItem      StepOver{"&Pas à pas", &Debug};
-    finalcut::FMenuItem      Breakpoint{"&Point d'arrêt", &Debug};
+    finalcut::FMenu          Breakpoint{"&Point d'arrêt", &Menubar};
+    finalcut::FMenuItem      AddBp{"&Ajouter", &Breakpoint};
+    finalcut::FMenuItem      DelBp{"&Supprimer", &Breakpoint};
+    finalcut::FMenuItem      ClearBp{"&Tout supprimer", &Breakpoint};
     finalcut::FDialogListMenu Window{"&Fenêtres", &Menubar};
     finalcut::FMenu          Help{"&Aide", &Menubar}; 
     finalcut::FMenuItem      About{"&A propos", &Help}; 
-    finalcut::FLabel         Info{this};
+    finalcut::FTextView      Log{this};
     finalcut::FStatusBar     Statusbar{this};
+    TextWindow               info{this};
     TextWindow               view{this};
     InstructionWindow        debug{this};
     TextWindow               regs{this};
@@ -420,5 +424,3 @@ class Menu final : public finalcut::FDialog
     ScenarioWindow           scenar{this};
     VMEngine                 vm{this};
 };
-
-
