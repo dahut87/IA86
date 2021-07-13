@@ -158,9 +158,24 @@ void InstructionWindow::clear()
   listview.redraw();
 }
 
+string InstructionWindow::getaddress()
+{
+    return listview.getCurrentItem()->getText(0).c_str();
+}
+
 void InstructionWindow::setmark(int index)
 {
   listview.setmark(index);
+}
+
+int InstructionWindow::getindex()
+{
+  return listview.getindex();
+}
+
+void InstructionWindow::setmultimark(std::vector<int> mark)
+{
+    listview.setmultimark(mark);
 }
 
 int InstructionWindow::getsize()
@@ -643,6 +658,7 @@ void VMEngine::Halt()
 
 void VMEngine::Unconfigure()
 {
+   this->clearbreakpoints();
    this->Halt();
     if (initialized)
         widget->tolog("VM IA86 - déconfiguration.........................[ INFO ]");
@@ -735,17 +751,17 @@ void VMEngine::clearbreakpoints()
     breakpoints.clear();
 }
 
-void VMEngine::addbreakpoint(int address)
+void VMEngine::addbreakpoint(std::string address)
 {
-    for(int item: breakpoints)
+    for(std::string item: breakpoints)
         if (item==address) return;
     breakpoints.push_back(address);
 }
 
-void VMEngine::removebreakpoint(int address)
+void VMEngine::removebreakpoint(std::string address)
 {
     int i=0;
-    for(int item: breakpoints)
+    for(std::string item: breakpoints)
         if (item==address)
         {
             breakpoints.erase(breakpoints.begin()+i);
@@ -756,8 +772,21 @@ void VMEngine::removebreakpoint(int address)
 std::vector<int> VMEngine::getBreapoints()
 {
     std::vector<int> list;
-    for(int item: breakpoints)
-        widget->tolog(to_string(item)); 
+    std::vector<std::array<std::string, 4>> items=((Menu*)widget)->getsrc();
+    for(std::string bpaddress: breakpoints)
+    {
+        int line=0;
+        for(std::array<std::string, 4> item: items)
+        {
+            if (item[0]==bpaddress)
+            {
+                ((Menu*)widget)->tolog(to_string(line));
+                list.push_back(line++);
+                break;
+            }
+                
+        }
+    }
     return list;
 }
  
@@ -1124,7 +1153,7 @@ void Menu::initWindows()
 
 void Menu::AdjustWindows()
 {
-  this->setGeometry ( FPoint { 63, 45 }, FSize{60, 11} );
+  //this->setGeometry ( FPoint { 63, 45 }, FSize{60, 11} );
   edit.setGeometry ( FPoint { 01, 17 }, FSize{39, 27} );
   view.setGeometry ( FPoint { 01, 45 }, FSize{60, 11} );
   regs.setGeometry ( FPoint { 01, 01 }, FSize{40, 15} );
@@ -1136,7 +1165,7 @@ void Menu::AdjustWindows()
   debug.setGeometry ( FPoint { 42, 17 }, FSize{60, 27} );
   scenar.setGeometry ( FPoint { 187, 01 }, FSize{25, 55} );
   info.setGeometry (FPoint { 55, 25 }, FSize{50, 14});
-  this->show();
+  //this->show();
   info.hide();
   flags.hide();
   stack.hide();
@@ -1159,11 +1188,11 @@ void Menu::AdjustWindows()
             mem.show();
       if (level.rights > 6)
             screen.show();
-      Options.setEnable();
+      /*Options.setEnable();
       Tools.setEnable();
       Window.setEnable();
       Debug.setEnable();
-      Breakpoint.setEnable();  
+      Breakpoint.setEnable();*/  
   }
   else
   {
@@ -1173,11 +1202,11 @@ void Menu::AdjustWindows()
       tuto.hide();
       debug.hide();
       scenar.hide();
-      Options.setDisable();
+      /*Options.setDisable();
       Tools.setDisable();
       Window.setDisable();
       Debug.setDisable();
-      Breakpoint.setDisable();  
+      Breakpoint.setDisable();*/  
   }
 }
 
@@ -1281,11 +1310,11 @@ void Menu::initMenusCallBack()
     this,
     &Menu::end
   );
-  About.addCallback
+  AddBp.addCallback
   (
     "clicked",
     this,
-    &Menu::about
+    &Menu::addbreakpoint
   );
 }
 
@@ -1308,14 +1337,13 @@ Episode 1 : Apprendre l'assembleur X86");
 
 void Menu::initLayout()
 {
-  Log.setGeometry (FPoint{1, 2}, FSize{getWidth(), getHeight() - 1});
+  this->setGeometry ( FPoint { 63, 45 }, FSize{60, 11}, false);
+  this->setTopPadding(1);
+  this->setLeftPadding(0);
+  this->setRightPadding(0);
+  this->setBottomPadding(0);
+  Log.setGeometry (FPoint{0, 0}, FSize{getWidth(), getHeight()},false);
   FDialog::initLayout();
-}
-
-void Menu::adjustSize()
-{
-  finalcut::FDialog::adjustSize();
-  Log.setGeometry (FPoint{1, 2}, FSize(getWidth(), getHeight() - 1));
 }
 
 void Menu::onClose (finalcut::FCloseEvent* ev)
@@ -1386,6 +1414,7 @@ void Menu::compile()
 void Menu::tolog(std::string str)
 {
     this->Log.append(str);
+    this->Log.scrollBy (0, 10);
 }
 
 void Menu::about()
@@ -1408,6 +1437,11 @@ void Menu::about()
   AdjustWindows();
 }
 
+std::vector<std::array<std::string, 4>> Menu::getsrc()
+{
+    return debug.get();
+}
+
 void Menu::showInstr()
 {
     try
@@ -1416,6 +1450,7 @@ void Menu::showInstr()
         {
             debug.set(vm.getInstr(vm.getCS(),vm.getEIP(),debug.getHeight()-3));
             debug.setmark(vm.getLine());
+            debug.setmultimark(vm.getBreapoints());
             mem.set(vm.getRam(vm.getDS(), 0x0000, mem.getHeight(),mem.getWidth()));
         }
     }
@@ -1487,6 +1522,12 @@ void Menu::step()
   showInstr();
 }
 
+void Menu::addbreakpoint()
+{
+    vm.addbreakpoint(debug.getaddress());
+    showInstr();
+}
+
 //----------------------------------------------------------------------
 // Fonction Main
 //----------------------------------------------------------------------
@@ -1495,9 +1536,6 @@ int main (int argc, char* argv[])
   mapping();
   finalcut::FApplication app {argc, argv};
   Menu main_dlg {&app};
-  /*main_dlg.setText ("Journaux");
-  main_dlg.setGeometry ( FPoint { 63, 45 }, FSize{60, 11} );
-  main_dlg.show();*/
   finalcut::FWidget::setMainWidget (&main_dlg);
   return app.exec();
 }

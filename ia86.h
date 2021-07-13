@@ -201,8 +201,11 @@ class InstructionWindow final : public finalcut::FDialog
     std::vector<std::array<std::string, 4>> get();
     void set(std::vector<std::array<std::string, 4>> src);
     void clear();
+    int getindex();
+    void setmultimark(std::vector<int> mark);
     void setmark(int index);
     int getsize();
+    string getaddress();
   private:
     // Method
     std::vector<std::array<std::string, 4>> content;
@@ -315,8 +318,8 @@ class VMEngine
     bool isInitialized();
     void setRights(int rights);
     void clearbreakpoints();
-    void addbreakpoint(int address);
-    void removebreakpoint(int address);
+    void addbreakpoint(std::string address);
+    void removebreakpoint(std::string address);
     std::vector<int> getBreapoints();
     int getLine();
     uint32_t getEIP();
@@ -325,7 +328,7 @@ class VMEngine
     uint16_t getES();
     uint16_t getSS();
   private:
-    std::vector<int> breakpoints;
+    std::vector<std::string> breakpoints;
     int rights;
     void Init();
     void Close();
@@ -356,6 +359,7 @@ class Menu final : public finalcut::FDialog
     void loadLevel(int alevel);
     void closeLevel();
     void tolog(std::string str);
+    std::vector<std::array<std::string, 4>> getsrc();
     void SetScreen(uint16_t x, uint16_t y, char value);
   private:
     void onTimer (finalcut::FTimerEvent*) override;
@@ -368,6 +372,7 @@ class Menu final : public finalcut::FDialog
     void end();
     void loadScenario(std::string file);
     void showInstr();
+    void addbreakpoint();
     void exec();
     void trace();
     void step();
@@ -376,13 +381,12 @@ class Menu final : public finalcut::FDialog
     void AdjustWindows();
     void initWindows();
     void initLayout() override;
-    void adjustSize() override;
     // Event handler
     void onClose (finalcut::FCloseEvent*) override;
     // Callback method
     void cb_message (const finalcut::FMenuItem*);
     // Data members
-    finalcut::FString        line{13, finalcut::UniChar::BoxDrawingsHorizontal};
+    //finalcut::FString        line{13, finalcut::UniChar::BoxDrawingsHorizontal};
     finalcut::FMenuBar       Menubar{this};
     finalcut::FMenu          Game{"&Partie", &Menubar};
     finalcut::FMenuItem      New{"&Nouvelle partie", &Game};
@@ -394,8 +398,13 @@ class Menu final : public finalcut::FDialog
     finalcut::FRadioMenuItem Es_edi{"ES:EDI", &Memory};
     finalcut::FRadioMenuItem Cs_eip{"CS:EIP", &Memory};
     finalcut::FRadioMenuItem Ss_sp{"SS:SP", &Memory};
+    finalcut::FRadioMenuItem Value{"Valeur...", &Memory};
+    finalcut::FMenu          Code{"&Code", &Options};
+    finalcut::FRadioMenuItem Cs_eip2{"CS:EIP", &Code};
+    finalcut::FRadioMenuItem Value2{"Valeur...", &Code};
+    finalcut::FRadioMenuItem Att{"Syntaxe AT&T", &Code};
     finalcut::FMenu          Tools{"&Outils", &Menubar};
-    finalcut::FMenuItem      Assemble{"&Compilation", &Tools};
+    finalcut::FMenuItem      Assemble{"&Assembler", &Tools};
     finalcut::FMenuItem      Rearange{"&Ordonne les fenêtres", &Tools};
     finalcut::FMenu          Debug{"&Déboguage", &Menubar};
     finalcut::FMenuItem      Run{"&Exécuter", &Debug};
@@ -404,7 +413,6 @@ class Menu final : public finalcut::FDialog
     finalcut::FMenuItem      StepOver{"&Pas à pas", &Debug};
     finalcut::FMenu          Breakpoint{"&Point d'arrêt", &Menubar};
     finalcut::FMenuItem      AddBp{"&Ajouter", &Breakpoint};
-    finalcut::FMenuItem      DelBp{"&Supprimer", &Breakpoint};
     finalcut::FMenuItem      ClearBp{"&Tout supprimer", &Breakpoint};
     finalcut::FDialogListMenu Window{"&Fenêtres", &Menubar};
     finalcut::FMenu          Help{"&Aide", &Menubar}; 
