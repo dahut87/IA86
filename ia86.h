@@ -205,7 +205,7 @@ class InstructionWindow final : public finalcut::FDialog
     void setmultimark(std::vector<int> mark);
     void setmark(int index);
     int getsize();
-    string getaddress();
+    std::string getaddress();
   private:
     // Method
     std::vector<std::array<std::string, 4>> content;
@@ -271,6 +271,7 @@ class Desassembler
 {
   public:
     Desassembler(Menu *widget);
+    void setSyntax(int syntax);
     void Desassemble(uint8_t *content, uint32_t address,uint32_t size, Unasm *unasm);
   private:
     csh handle;
@@ -288,6 +289,7 @@ class Assembler
 {
   public:
     Assembler(Menu *widget);
+    void setSyntax(int syntax);
     void Assemble(Code *code);
     std::vector<Code> MultiAssemble(std::string source,uint32_t address);
   private:
@@ -306,6 +308,7 @@ class VMEngine
     void Halt();
     void Unconfigure();
     uint32_t getCurrent();
+    void setSyntax(int asmsyntax,int unasmsyntax);
     void Run(bool astep, bool acall, uint64_t timeout);
     std::string getFlags();
     std::string getRegs();
@@ -318,17 +321,19 @@ class VMEngine
     bool isInitialized();
     void setRights(int rights);
     void clearbreakpoints();
-    void addbreakpoint(std::string address);
-    void removebreakpoint(std::string address);
+    void addbreakpoint(uint16_t segment, uint32_t address);
+    void removebreakpoint(uint16_t segment, uint32_t address);
     std::vector<int> getBreapoints();
     int getLine();
     uint32_t getEIP();
+    uint32_t getESI();
+    uint32_t getEDI();
+    uint32_t getESP();
     uint16_t getCS();
     uint16_t getDS();
     uint16_t getES();
     uint16_t getSS();
   private:
-    std::vector<std::string> breakpoints;
     int rights;
     void Init();
     void Close();
@@ -372,11 +377,12 @@ class Menu final : public finalcut::FDialog
     void end();
     void loadScenario(std::string file);
     void showInstr();
-    void addbreakpoint();
+    void addbp();
     void exec();
     void trace();
     void step();
     void about();
+    void changesyntax();
     void ClearScreen();
     void AdjustWindows();
     void initWindows();
@@ -393,16 +399,16 @@ class Menu final : public finalcut::FDialog
     finalcut::FMenuItem      Line2{&Game};
     finalcut::FMenuItem      Quit{"&Quitter", &Game};
     finalcut::FMenu          Options{"&Options", &Menubar};
-    finalcut::FMenu          Memory{"&Mémoire", &Options};
+    finalcut::FMenu          Memory{"&Visualisateur Mémoire", &Options};
+    finalcut::FRadioMenuItem Ds_00{"DS:0x00000000", &Memory};
     finalcut::FRadioMenuItem Ds_esi{"DS:ESI", &Memory};
     finalcut::FRadioMenuItem Es_edi{"ES:EDI", &Memory};
     finalcut::FRadioMenuItem Cs_eip{"CS:EIP", &Memory};
-    finalcut::FRadioMenuItem Ss_sp{"SS:SP", &Memory};
+    finalcut::FRadioMenuItem Ss_esp{"SS:ESP", &Memory};
     finalcut::FRadioMenuItem Value{"Valeur...", &Memory};
-    finalcut::FMenu          Code{"&Code", &Options};
-    finalcut::FRadioMenuItem Cs_eip2{"CS:EIP", &Code};
-    finalcut::FRadioMenuItem Value2{"Valeur...", &Code};
-    finalcut::FRadioMenuItem Att{"Syntaxe AT&T", &Code};
+    finalcut::FMenu          Code{"&Syntaxe", &Options};
+    finalcut::FCheckMenuItem AsmAtt{"Assembleur AT&T", &Code};
+    finalcut::FCheckMenuItem UnasmAtt{"Désassembleur AT&T", &Code};
     finalcut::FMenu          Tools{"&Outils", &Menubar};
     finalcut::FMenuItem      Assemble{"&Assembler", &Tools};
     finalcut::FMenuItem      Rearange{"&Ordonne les fenêtres", &Tools};

@@ -78,6 +78,7 @@ bool ok=false;
 bool executed=false;
 bool initialized=false;
 uint32_t hadcall=0x0;
+std::vector<std::array<uint32_t,2>> breakpoints;
 
 //----------------------------------------------------------------------
 // Classe ScenarioWindow
@@ -158,9 +159,9 @@ void InstructionWindow::clear()
   listview.redraw();
 }
 
-string InstructionWindow::getaddress()
+std::string InstructionWindow::getaddress()
 {
-    return listview.getCurrentItem()->getText(0).c_str();
+    return listview.getCurrentItem()->getText(1).c_str();
 }
 
 void InstructionWindow::setmark(int index)
@@ -232,7 +233,7 @@ void TextEditWindow::append(const finalcut::FString& str)
 
 std::string TextEditWindow::get()
 {
-  return scrolltext.getText().toString () ;
+  return scrolltext.getText().toString() ;
 }
 
 void TextEditWindow::set(const finalcut::FString& str)
@@ -330,6 +331,11 @@ Desassembler::Desassembler(Menu *widget) : widget(widget)
     }
 }
 
+void Desassembler::setSyntax(int syntax)
+{
+    cs_option(handle, CS_OPT_SYNTAX, syntax);
+}
+
 void Desassembler::Desassemble(uint8_t *content, uint32_t address,uint32_t size, Unasm *unasm)
 {
     try
@@ -385,6 +391,11 @@ Assembler::Assembler(Menu *widget) : widget(widget)
        widget->tolog(e.what());
     }
     ks_option(ks, KS_OPT_SYNTAX, KS_OPT_SYNTAX_NASM);
+}
+
+void Assembler::setSyntax(int syntax)
+{
+    ks_option(ks, KS_OPT_SYNTAX, syntax);
 }
 
 std::vector<Code> Assembler::MultiAssemble(std::string source,uint32_t address)
@@ -670,6 +681,8 @@ std::string VMEngine::getRam(int segment, int address,int lines, int linesize)
     int reallinesize=(int)((linesize-16)/4);
     int size=reallinesize*(lines-3);
     uint32_t realaddress=segment*16+address;
+    if (realaddress>1024*1024)
+        return "Zone en dehors de la mémorie";
     uint8_t *code=new uint8_t[512];
     std::string result="";
     std::string line;
@@ -751,18 +764,18 @@ void VMEngine::clearbreakpoints()
     breakpoints.clear();
 }
 
-void VMEngine::addbreakpoint(std::string address)
+void VMEngine::addbreakpoint(uint16_t segment,uint32_t address)
 {
-    for(std::string item: breakpoints)
-        if (item==address) return;
-    breakpoints.push_back(address);
+    for(std::array<uint32_t,2> item: breakpoints)
+        if (item[1]==address && item[0]==segment) return;
+    breakpoints.push_back({segment,address});
 }
 
-void VMEngine::removebreakpoint(std::string address)
+void VMEngine::removebreakpoint(uint16_t segment,uint32_t address)
 {
     int i=0;
-    for(std::string item: breakpoints)
-        if (item==address)
+    for(std::array<uint32_t,2> item: breakpoints)
+        if (item[1]==address && item[0]==segment) 
         {
             breakpoints.erase(breakpoints.begin()+i);
             return;
@@ -773,18 +786,18 @@ std::vector<int> VMEngine::getBreapoints()
 {
     std::vector<int> list;
     std::vector<std::array<std::string, 4>> items=((Menu*)widget)->getsrc();
-    for(std::string bpaddress: breakpoints)
+    for(std::array<uint32_t,2> bp: breakpoints)
     {
         int line=0;
         for(std::array<std::string, 4> item: items)
         {
-            if (item[0]==bpaddress)
+            if (item[0]==intToHexString(bp[1],8))// && getCS()==bp[0])
             {
                 ((Menu*)widget)->tolog(to_string(line));
-                list.push_back(line++);
+                list.push_back(line);
                 break;
             }
-                
+            line++;
         }
     }
     return list;
@@ -818,7 +831,11 @@ static void hook_code (uc_engine *uc, uint64_t address, uint32_t size, void *use
         executed=false;
     else if (step && (code[0]==0xE8 || code[0]==0xFF || code[0]==0x9A || (code[0]==0x66 && (code[1]==0xE8 || code[1]==0xFF || code[1]==0x9A))))
         hadcall=address+size;
-    else if (!step || (hadcall>0 && !call)) return;
+    bool breakp=false;
+    for(std::array<uint32_t,2> bp: breakpoints)
+        if (address==bp[0]*16+bp[1])
+            breakp=true;
+    if (!breakp && (!step || (hadcall>0 && !call))) return;
     uc_emu_stop(uc);
 }
 
@@ -905,6 +922,12 @@ int VMEngine::verify()
    return 0;
 }
 
+void VMEngine::setSyntax(int asmsyntax,int unasmsyntax)
+{
+    asmer.setSyntax(asmsyntax);
+    unasmer.setSyntax(unasmsyntax);
+}
+
 void VMEngine::setRights(int rights)
 {
     this->rights=rights;
@@ -913,6 +936,33 @@ void VMEngine::setRights(int rights)
 uint32_t VMEngine::getCurrent()
 {
     return getEIP()+getCS()*16;
+}
+
+uint32_t VMEngine::getESI()
+{
+        int esi;
+        err = uc_reg_read(uc, UC_X86_REG_ESI, &esi);
+        if (err != UC_ERR_OK)
+           throw Error("VM IA86 - voir ESI................................[ERREUR]");
+        return esi;
+}
+
+uint32_t VMEngine::getEDI()
+{
+        int edi;
+        err = uc_reg_read(uc, UC_X86_REG_EDI, &edi);
+        if (err != UC_ERR_OK)
+           throw Error("VM IA86 - voir EDI................................[ERREUR]");
+        return edi;
+}
+
+uint32_t VMEngine::getESP()
+{
+        int esp;
+        err = uc_reg_read(uc, UC_X86_REG_ESP, &esp);
+        if (err != UC_ERR_OK)
+           throw Error("VM IA86 - voir ESP................................[ERREUR]");
+        return esp;
 }
 
 uint32_t VMEngine::getEIP()
@@ -1237,7 +1287,8 @@ void Menu::initMenus()
   Breakpoint.setStatusbarMessage ("Enlève ou met un point d'arrêt"); 
   End.addAccelerator (FKey::F6);
   End.setStatusbarMessage ("Termine le programme et remet à zéro la machine IA86");
-  About.setStatusbarMessage ("A propos de IA86"); 
+  About.setStatusbarMessage ("A propos de IA86");
+  AddBp.addAccelerator (FKey::F4);
 }
 
 void Menu::ClearScreen()
@@ -1314,7 +1365,49 @@ void Menu::initMenusCallBack()
   (
     "clicked",
     this,
-    &Menu::addbreakpoint
+    &Menu::addbp
+  );
+  AsmAtt.addCallback
+  (
+    "clicked",
+    this,
+    &Menu::changesyntax
+  );
+  UnasmAtt.addCallback
+  (
+    "clicked",
+    this,
+    &Menu::changesyntax
+  );
+  Ds_00.addCallback
+  (
+    "clicked",
+    this,
+    &Menu::showInstr
+  );
+  Ds_esi.addCallback
+  (
+    "clicked",
+    this,
+    &Menu::showInstr
+  );
+  Es_edi.addCallback
+  (
+    "clicked",
+    this,
+    &Menu::showInstr
+  );
+  Cs_eip.addCallback
+  (
+    "clicked",
+    this,
+    &Menu::showInstr
+  );
+  Ss_esp.addCallback
+  (
+    "clicked",
+    this,
+    &Menu::showInstr
   );
 }
 
@@ -1342,6 +1435,7 @@ void Menu::initLayout()
   this->setLeftPadding(0);
   this->setRightPadding(0);
   this->setBottomPadding(0);
+  Ds_00.setChecked();
   Log.setGeometry (FPoint{0, 0}, FSize{getWidth(), getHeight()},false);
   FDialog::initLayout();
 }
@@ -1451,7 +1545,16 @@ void Menu::showInstr()
             debug.set(vm.getInstr(vm.getCS(),vm.getEIP(),debug.getHeight()-3));
             debug.setmark(vm.getLine());
             debug.setmultimark(vm.getBreapoints());
-            mem.set(vm.getRam(vm.getDS(), 0x0000, mem.getHeight(),mem.getWidth()));
+            if (Ds_00.isChecked())
+                mem.set(vm.getRam(vm.getDS(), 0x000000000, mem.getHeight(),mem.getWidth()));
+            else if (Ds_esi.isChecked())
+                mem.set(vm.getRam(vm.getDS(), vm.getESI(), mem.getHeight(),mem.getWidth()));
+            else if (Es_edi.isChecked())
+                mem.set(vm.getRam(vm.getES(), vm.getEDI(), mem.getHeight(),mem.getWidth()));
+            else if (Cs_eip.isChecked())
+                mem.set(vm.getRam(vm.getCS(), vm.getEIP(), mem.getHeight(),mem.getWidth()));
+            else if (Ss_esp.isChecked())
+                mem.set(vm.getRam(vm.getSS(), vm.getESP(), mem.getHeight(),mem.getWidth()));            
         }
     }
     catch(exception const& e)
@@ -1522,10 +1625,30 @@ void Menu::step()
   showInstr();
 }
 
-void Menu::addbreakpoint()
+void Menu::changesyntax()
 {
-    vm.addbreakpoint(debug.getaddress());
+    int asmsyntax,unasmsyntax;
+    if (AsmAtt.isChecked())
+        asmsyntax=KS_OPT_SYNTAX_ATT;
+    else
+        asmsyntax=KS_OPT_SYNTAX_INTEL;
+    if (UnasmAtt.isChecked())    
+        unasmsyntax=CS_OPT_SYNTAX_ATT;
+    else 
+        unasmsyntax=CS_OPT_SYNTAX_INTEL;
+    vm.setSyntax(asmsyntax,unasmsyntax);
     showInstr();
+}
+
+void Menu::addbp()
+{
+    if (vm.isInitialized())
+    {
+        std::string address=debug.getaddress();
+        tolog("VM IA86 - ajout breakpoint.....................["+address+"]");
+        vm.addbreakpoint(vm.getCS(),stoi(address,nullptr,16));
+        showInstr();
+    }
 }
 
 //----------------------------------------------------------------------
