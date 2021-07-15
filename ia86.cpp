@@ -531,6 +531,32 @@ std::string VMEngine::getFlags()
         return out.str();    
 }
 
+std::string VMEngine::getStack()
+{
+    uint16_t *code=new uint16_t[12];
+    std::string result="";
+    uint16_t SS=getSS();
+    uint32_t ESP=getESP();
+    uint32_t EBP=getEBP();
+    int realaddress=SS*16+ESP-12;
+    if (realaddress<0)
+        realaddress=0;
+    //((Menu *)widget)->tolog(intToHexString(realaddress,8));
+    err = uc_mem_read(uc, realaddress, code, 2*12);
+    if (err)
+        throw Error("VM IA86 - voir pile...............................[ERREUR]");
+    for(int i=11;i>=0;i--)
+    {
+        result+=intToHexString(code[i],4);
+        if (realaddress+i*2==SS*16+ESP)
+            result+="<ESP";
+        if (realaddress+i*2==SS*16+EBP)
+            result+="<EBP"; 
+        result+="\n";           
+    }
+    return result;
+}
+
 std::string VMEngine::getRegs()
 {
     int regsi836[] = {
@@ -835,7 +861,7 @@ static void hook_code (uc_engine *uc, uint64_t address, uint32_t size, void *use
     for(std::array<uint32_t,2> bp: breakpoints)
         if (address==bp[0]*16+bp[1])
             breakp=true;
-    if (!breakp && (!step || (hadcall>0 && !call))) return;
+    if ((!step && !breakp) || (hadcall>0 && !call && !breakp)) return;
     uc_emu_stop(uc);
 }
 
@@ -949,7 +975,7 @@ uint32_t VMEngine::getESI()
 
 uint32_t VMEngine::getEDI()
 {
-        int edi;
+        uint32_t edi;
         err = uc_reg_read(uc, UC_X86_REG_EDI, &edi);
         if (err != UC_ERR_OK)
            throw Error("VM IA86 - voir EDI................................[ERREUR]");
@@ -958,16 +984,25 @@ uint32_t VMEngine::getEDI()
 
 uint32_t VMEngine::getESP()
 {
-        int esp;
+        uint32_t esp;
         err = uc_reg_read(uc, UC_X86_REG_ESP, &esp);
         if (err != UC_ERR_OK)
            throw Error("VM IA86 - voir ESP................................[ERREUR]");
         return esp;
 }
 
+uint32_t VMEngine::getEBP()
+{
+        uint32_t ebp;
+        err = uc_reg_read(uc, UC_X86_REG_EBP, &ebp);
+        if (err != UC_ERR_OK)
+           throw Error("VM IA86 - voir EBP................................[ERREUR]");
+        return ebp;
+}
+
 uint32_t VMEngine::getEIP()
 {
-        int eip;
+        uint32_t eip;
         err = uc_reg_read(uc, UC_X86_REG_EIP, &eip);
         if (err != UC_ERR_OK)
            throw Error("VM IA86 - voir EIP................................[ERREUR]");
@@ -976,7 +1011,7 @@ uint32_t VMEngine::getEIP()
 
 uint16_t VMEngine::getCS()
 {
-        int cs;
+        uint16_t cs;
         err = uc_reg_read(uc, UC_X86_REG_CS, &cs);
         if (err != UC_ERR_OK)
            throw Error("VM IA86 - voir CS.................................[ERREUR]");
@@ -985,7 +1020,7 @@ uint16_t VMEngine::getCS()
 
 uint16_t VMEngine::getDS()
 {
-        int ds;
+        uint16_t ds;
         err = uc_reg_read(uc, UC_X86_REG_DS, &ds);
         if (err != UC_ERR_OK)
            throw Error("VM IA86 - voir DS.................................[ERREUR]");
@@ -994,7 +1029,7 @@ uint16_t VMEngine::getDS()
 
 uint16_t VMEngine::getES()
 {
-        int es;
+        uint16_t es;
         err = uc_reg_read(uc, UC_X86_REG_ES, &es);
         if (err != UC_ERR_OK)
            throw Error("VM IA86 - voir ES.................................[ERREUR]");
@@ -1003,7 +1038,7 @@ uint16_t VMEngine::getES()
 
 uint16_t VMEngine::getSS()
 {
-        int ss;
+        uint16_t ss;
         err = uc_reg_read(uc, UC_X86_REG_SS, &ss);
         if (err != UC_ERR_OK)
            throw Error("VM IA86 - voir SS.................................[ERREUR]");
@@ -1177,6 +1212,7 @@ void Menu::initWindows()
   flags.setText ("Drapeaux");
   stack.setText ("Pile");
   mem.setText ("Mémoire");
+  mem.setResizeable();
   tuto.setText ("Guide");
   tuto.setResizeable();
   tuto.show();
@@ -1242,7 +1278,7 @@ void Menu::AdjustWindows()
       Tools.setEnable();
       Window.setEnable();
       Debug.setEnable();
-      Breakpoint.setEnable();*/  
+      Breakpoint.setEnable(); */
   }
   else
   {
@@ -1256,7 +1292,7 @@ void Menu::AdjustWindows()
       Tools.setDisable();
       Window.setDisable();
       Debug.setDisable();
-      Breakpoint.setDisable();*/  
+      Breakpoint.setDisable();  */
   }
 }
 
@@ -1379,7 +1415,7 @@ void Menu::initMenusCallBack()
     this,
     &Menu::changesyntax
   );
-  Ds_00.addCallback
+  Ds_000.addCallback
   (
     "clicked",
     this,
@@ -1404,6 +1440,12 @@ void Menu::initMenusCallBack()
     &Menu::showInstr
   );
   Ss_esp.addCallback
+  (
+    "clicked",
+    this,
+    &Menu::showInstr
+  );
+  Ss_FFF.addCallback
   (
     "clicked",
     this,
@@ -1435,7 +1477,7 @@ void Menu::initLayout()
   this->setLeftPadding(0);
   this->setRightPadding(0);
   this->setBottomPadding(0);
-  Ds_00.setChecked();
+  Ds_000.setChecked();
   Log.setGeometry (FPoint{0, 0}, FSize{getWidth(), getHeight()},false);
   FDialog::initLayout();
 }
@@ -1450,6 +1492,14 @@ void Menu::closeLevel()
   vm.Unconfigure();
   AdjustWindows();
 }
+
+/*void Menu::loadBios(std::string file)
+{
+
+    std::ifstream input(file, std::ios::binary );
+    std::vector<unsigned char> buffer(std::istreambuf_iterator<char>(input), {});
+   
+}*/
 
 void Menu::loadScenario(std::string file)
 {
@@ -1475,6 +1525,7 @@ void Menu::loadScenario(std::string file)
        tolog("Application - charge scénarios....................[ERREUR]");
        closeLevel();
    }
+   inFile.close();
 }
 
 void Menu::loadLevel(int alevel)
@@ -1545,7 +1596,7 @@ void Menu::showInstr()
             debug.set(vm.getInstr(vm.getCS(),vm.getEIP(),debug.getHeight()-3));
             debug.setmark(vm.getLine());
             debug.setmultimark(vm.getBreapoints());
-            if (Ds_00.isChecked())
+            if (Ds_000.isChecked())
                 mem.set(vm.getRam(vm.getDS(), 0x000000000, mem.getHeight(),mem.getWidth()));
             else if (Ds_esi.isChecked())
                 mem.set(vm.getRam(vm.getDS(), vm.getESI(), mem.getHeight(),mem.getWidth()));
@@ -1554,7 +1605,9 @@ void Menu::showInstr()
             else if (Cs_eip.isChecked())
                 mem.set(vm.getRam(vm.getCS(), vm.getEIP(), mem.getHeight(),mem.getWidth()));
             else if (Ss_esp.isChecked())
-                mem.set(vm.getRam(vm.getSS(), vm.getESP(), mem.getHeight(),mem.getWidth()));            
+                mem.set(vm.getRam(vm.getSS(), vm.getESP(), mem.getHeight(),mem.getWidth()));
+            else if (Ss_FFF.isChecked())
+                mem.set(vm.getRam(vm.getSS(), 0x0000FF20, mem.getHeight(),mem.getWidth()));  
         }
     }
     catch(exception const& e)
@@ -1580,11 +1633,13 @@ void Menu::refresh()
     {
         regs.set(vm.getRegs());
         flags.set(vm.getFlags());
+        stack.set(vm.getStack());
     }
     catch(exception const& e)
     {
         tolog(e.what());
         vm.Halt();
+        vm.Unconfigure();
     }
   }
   if (!vm.isExecuted())

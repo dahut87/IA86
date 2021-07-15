@@ -10,6 +10,16 @@
 inc dx
 mov esi,0x44440234
 syscall
+mov ax,0x9000
+mov ss,ax
+mov ax,0xFFFF
+mov sp,ax
+mov cx,10
+go:
+push cx
+dec cx
+cmp cx,0
+jnz go
 hlt
 jmp 0x14D
 .org 0x8D
@@ -57,7 +67,10 @@ mov es,ax
         "niveau_titre" : "Suite",          
         "niveau_description" : "Il faut connaitre...",
         "niveau_tutoriel" : "Ceci vous...",
-        "niveau_code" : "mov ax,0x545
+        "niveau_code" : "mov ax,0x9000
+mov ss,ax
+mov ax,0xFFFF
+mov sp,ax
 _pour:
 lea si,[msg]
 call show

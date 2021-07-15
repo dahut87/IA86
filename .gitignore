@@ -1,2 +1,4 @@
 ia86
 *.old
+lib*
+a.out

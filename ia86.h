@@ -312,6 +312,7 @@ class VMEngine
     void Run(bool astep, bool acall, uint64_t timeout);
     std::string getFlags();
     std::string getRegs();
+    std::string getStack();
     std::vector<std::array<std::string, 4>>  getInstr(int segment, int address,int size);
     void SetMem(Code *code);
     void SetRegs(State *init);
@@ -329,6 +330,7 @@ class VMEngine
     uint32_t getESI();
     uint32_t getEDI();
     uint32_t getESP();
+    uint32_t getEBP();
     uint16_t getCS();
     uint16_t getDS();
     uint16_t getES();
@@ -400,11 +402,12 @@ class Menu final : public finalcut::FDialog
     finalcut::FMenuItem      Quit{"&Quitter", &Game};
     finalcut::FMenu          Options{"&Options", &Menubar};
     finalcut::FMenu          Memory{"&Visualisateur Mémoire", &Options};
-    finalcut::FRadioMenuItem Ds_00{"DS:0x00000000", &Memory};
+    finalcut::FRadioMenuItem Ds_000{"DS:0000", &Memory};
     finalcut::FRadioMenuItem Ds_esi{"DS:ESI", &Memory};
     finalcut::FRadioMenuItem Es_edi{"ES:EDI", &Memory};
     finalcut::FRadioMenuItem Cs_eip{"CS:EIP", &Memory};
     finalcut::FRadioMenuItem Ss_esp{"SS:ESP", &Memory};
+    finalcut::FRadioMenuItem Ss_FFF{"SS:FFFF", &Memory};
     finalcut::FRadioMenuItem Value{"Valeur...", &Memory};
     finalcut::FMenu          Code{"&Syntaxe", &Options};
     finalcut::FCheckMenuItem AsmAtt{"Assembleur AT&T", &Code};
