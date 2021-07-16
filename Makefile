@@ -37,7 +37,7 @@ stop:
 delete:
 	rm -rf ./ia86
 
-copy:	libcapstone.so.4 libunicorn.so.1 libfinal.so.0.7.2 libkeystone.so.0 libc.musl-x86_64.so.1
+copy:	libcapstone.so.4 libunicorn.so.1 libfinal.so.0.7.2 libkeystone.so.0 libc.musl-x86_64.so.1 libstdc++.so.6.0.28 libz.so.1.2.11 libgcc_s.so.1
 
 libcapstone.so.4:
 	${DOCKER} cp /usr/lib/libcapstone.so.4 /data/libcapstone.so.4
@@ -54,3 +54,15 @@ libkeystone.so.0:
 
 libc.musl-x86_64.so.1:
 	${DOCKER} cp /lib/libc.musl-x86_64.so.1 /data/libc.musl-x86_64.so.1
+
+libz.so.1.2.11:
+	${DOCKER} cp /lib/libz.so.1.2.11 /data/libz.so.1.2.11
+	ln -s ./libz.so.1.2.11 ./libz.so.1
+
+libstdc++.so.6.0.28:	
+	${DOCKER} cp /usr/lib/libstdc++.so.6.0.28 /data/libstdc++.so.6.0.28
+	ln -s ./libstdc++.so.6.0.28 ./libstdc++.so.6
+
+libgcc_s.so.1:
+	${DOCKER} cp /usr/lib/libgcc_s.so.1 /data/libgcc_s.so.1
+	

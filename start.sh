@@ -1,6 +1,14 @@
 #!/bin/bash
 X=$(xrandr --current | grep '*' | uniq | awk '{print $1}' | cut -d 'x' -f1)
 Y=$(xrandr --current | grep '*' | uniq | awk '{print $1}' | cut -d 'x' -f2)
+KITTY=$(kitty -v|grep created)
+if [ "${KITTY}" != "" ]; then
+	echo "Kitty installé"
+	if [ ${X} -ge 1920 ]; then
+		kitty --start-as fullscreen bash -c "docker run -it -e COLUMNS=213 -e LINES=58 --name maker --rm -v $(pwd):/data maker ./ia86"
+		exit
+	fi
+fi
 if [ ${X} -ge 1920 ]; then
 	SIZE=11
 elif [ ${X} -ge 1680 ]; then
