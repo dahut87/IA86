@@ -5,7 +5,7 @@ KITTY=$(kitty -v|grep created)
 if [ "${KITTY}" != "" ]; then
 	echo "Kitty installé"
 	if [ ${X} -ge 1920 ]; then
-		kitty --start-as fullscreen ./ia86
+		kitty --start-as fullscreen ./ia86 $1
 		exit
 	fi
 fi
@@ -22,4 +22,4 @@ elif [ ${X} -ge 1280 ]; then
 else
 	SIZE=6
 fi
-xterm -fullscreen -fa monaco -fs ${SIZE} -bg black -fg green -e ./ia86
+xterm -fullscreen -fa monaco -fs ${SIZE} -bg black -fg green -e "sleep 0.4;./ia86 $1"

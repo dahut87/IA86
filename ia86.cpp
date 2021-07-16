@@ -67,7 +67,7 @@ Scenario scenario;
 Level level;
 Unasm unasm;
 int marker;
-bool debug=true;
+bool debugnow;
 uc_hook uh_mem;
 uc_hook uh_code;
 uc_hook uh_call;
@@ -323,7 +323,8 @@ Desassembler::Desassembler(Menu *widget) : widget(widget)
         err = cs_open(CS_ARCH_X86, CS_MODE_16, &handle);
         if (err != CS_ERR_OK) 
             throw Error("Désassembleur - initialisation....................[ERREUR]");
-        widget->tolog("Désassembleur - initialisation....................[  OK  ]");
+        if (debugnow)
+            widget->tolog("Désassembleur - initialisation....................[  OK  ]");
     }
     catch(exception const& e)
     {
@@ -346,7 +347,7 @@ void Desassembler::Desassemble(uint8_t *content, uint32_t address,uint32_t size,
             throw Error("Désassembleur - désassemblage.....................[ERREUR]");
         else
         {  
-            if (debug) widget->tolog("Désassemblage - désassemblage.....................[ "+to_string(srcsize)+"l ]");
+            if (debugnow) widget->tolog("Désassemblage - désassemblage.....................[ "+to_string(srcsize)+"l ]");
             unasm->src.clear();
             unasm->pos.clear();
 		    for (size_t j = 0; j < srcsize; j++)
@@ -384,7 +385,8 @@ Assembler::Assembler(Menu *widget) : widget(widget)
         err = ks_open(KS_ARCH_X86, KS_MODE_16, &ks);
         if (err != KS_ERR_OK) 
             throw Error("Assembleur - initialisation.......................[ERREUR]");
-        widget->tolog("Assembleur - initialisation.......................[  OK  ]");
+        if (debugnow)
+            widget->tolog("Assembleur - initialisation.......................[  OK  ]");
     }
     catch(exception const& e)
     {
@@ -675,7 +677,8 @@ void VMEngine::Init()
         err = uc_open(UC_ARCH_X86, UC_MODE_16, &uc);
         if (err != UC_ERR_OK)
             throw Error("VM IA86 - initilisation...........................[ERREUR]");
-        widget->tolog("VM IA86 - initilisation...........................[  OK  ]");
+        if (debugnow)
+            widget->tolog("VM IA86 - initilisation...........................[  OK  ]");
     }
     catch(exception const& e)
     {
@@ -959,7 +962,7 @@ void VMEngine::Configure(State *init, std::string code)
                 SetMem(&mcode[i]);
            else     
                 throw Error("VM IA86 - code non assemblé...................[ERREUR]");
-           if (debug) widget->tolog("Section N°"+std::to_string(i)+" : "+intToHexString(mcode[i].address,8)+" -> "+to_string(mcode[i].size)+" octets");
+           if (debugnow) widget->tolog("Section N°"+std::to_string(i)+" : "+intToHexString(mcode[i].address,8)+" -> "+to_string(mcode[i].size)+" octets");
         }
         status=verify();
         if (status==0)
@@ -1183,8 +1186,9 @@ void VMEngine::SetRegs(State *init)
             if ((init->dump.regs.eax & 0xFFFF0000) == 0x00000000)
                 out << " AX=" << std::uppercase << std::setfill('0') << std::setw(4) << std::hex << init->dump.regs.ax << " ";               
             else
-                out << "EAX=" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << init->dump.regs.eax << " ";               
-        widget->tolog(out.str());
+                out << "EAX=" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex << init->dump.regs.eax << " ";    
+        if (debugnow)           
+            widget->tolog(out.str());
 }
 
 void VMEngine::Run(bool astep, bool acall, uint64_t timeout)
@@ -1233,6 +1237,8 @@ Menu::Menu (finalcut::FWidget* parent)
   initMenusCallBack();
   loadScenario("./scenarios.json");
   addTimer(50);
+  if (debugnow)
+    tolog("DEBOGUAGE ACTIVE !");
 }
 
 void Menu::initWindows()
@@ -1557,7 +1563,8 @@ void Menu::loadScenario(std::string file)
    {
       scenar.Load(scenario.levels);
       scenario.loaded=true;
-      tolog("Application - charge scénarios....................[  OK  ]");
+      if (debugnow)
+        tolog("Application - charge scénarios....................[  OK  ]");
       tolog("-={ "+ scenario.title+" }=-");
       loadLevel(0);
    }
@@ -1571,19 +1578,23 @@ void Menu::loadScenario(std::string file)
 
 void Menu::loadLevel(int alevel)
 {
-  vm.Unconfigure();
-  level=scenario.levels[alevel];
-  tolog("Application - charge niveau.......................[ INFO ]");
-  view.setText("Objectif: "+level.title);
-  view.clear();
-  view.append(level.description);
-  tuto.clear();
-  tuto.append(level.tutorial);
-  edit.set(level.code);
-  debug.clear();
-  vm.setRights(level.rights);
-  AdjustWindows();
-  showInstr();
+  if (scenario.levels[alevel].title!=level.title)
+  {
+      vm.Unconfigure();
+      level=scenario.levels[alevel];
+      if (debugnow)
+        tolog("Application - charge niveau.......................[ INFO ]");
+      view.setText("Objectif: "+level.title);
+      view.clear();
+      view.append(level.description);
+      tuto.clear();
+      tuto.append(level.tutorial);
+      edit.set(level.code);
+      debug.clear();
+      vm.setRights(level.rights);
+      AdjustWindows();
+      showInstr();
+  }
 }
 
 void Menu::end()
@@ -1738,7 +1749,8 @@ void Menu::addbp()
     if (vm.isInitialized())
     {
         std::string address=debug.getaddress();
-        tolog("VM IA86 - ajout breakpoint.....................["+address+"]");
+        if (debugnow)
+            tolog("VM IA86 - ajout breakpoint.....................["+address+"]");
         vm.addbreakpoint(vm.getCS(),stoi(address,nullptr,16));
         showInstr();
     }
@@ -1750,6 +1762,10 @@ void Menu::addbp()
 int main (int argc, char* argv[])
 {
   mapping();
+  std::vector<std::string> args(argv, argv+argc);
+  for (size_t i = 1; i < args.size(); ++i) {
+      debugnow=(args[i] == "debug");
+  }
   finalcut::FApplication app {argc, argv};
   Menu main_dlg {&app};
   finalcut::FWidget::setMainWidget (&main_dlg);
