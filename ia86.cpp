@@ -405,17 +405,19 @@ std::vector<Code> Assembler::MultiAssemble(std::string source,uint32_t address)
         std::vector<Code> mcode;
         std::istringstream stream(source);
         std::string line;
-        std::regex regex("^ *.org 0x([0-F]+)$");
+        std::regex regex_org("^ *.org 0x([0-F]+)$");
+        std::regex regex_name("^ *.title ([a-zA-Z0-9_]+)$");
         Code *code=new Code;
         bool begin=true;
         int org=address;
+        std::string name="/";
         code->address=org;
         while (std::getline(stream, line)) 
         {
             if (line.find(".org") != std::string::npos)
             {
                 std::smatch match;
-                if(std::regex_search(line, match, regex))
+                if(std::regex_search(line, match, regex_org))
                 {
                     org=std::stoul(match.str(1), nullptr, 16);
                 }
@@ -423,9 +425,19 @@ std::vector<Code> Assembler::MultiAssemble(std::string source,uint32_t address)
                 {
                     mcode.push_back(*code);
                     code=new Code;
-                    code->address=org;                
+                    code->address=org;
+                    code->name=name;
+                    name="/";
                 }
             }    
+            else if (line.find(".title") != std::string::npos)
+            {
+                std::smatch match;
+                if(std::regex_search(line, match, regex_name))
+                {
+                    name=match.str(1);
+                }
+            }
             else
             {
                 code->src.append(line+"\n");
@@ -733,6 +745,30 @@ std::string VMEngine::getRam(int segment, int address,int lines, int linesize)
     result+=" | "+line+"\n";
     return result;
 }
+
+std::vector<std::array<std::string, 7>> VMEngine::getCode()
+{
+    int line=0;
+    std::vector<std::array<std::string, 7>> result;
+    for(Code code: mcode)
+    {   
+        std::string *linestr = new std::string(to_string(line++));
+        std::string *name = new std::string(code.name);
+        std::string *address = new std::string(intToHexString(code.address,8));
+        std::string *size = new std::string(to_string(code.size));
+        std::string *srcsize = new std::string(to_string(code.src.size()));
+        std::string *assembled = new std::string;
+        if (code.assembled)
+            *assembled="X";
+        std::string *loaded = new std::string;
+        if (code.loaded)
+            *loaded="X";
+        std::array<std::string, 7> *array = new  std::array<std::string, 7>{*linestr,*name,*address,*size,*srcsize,*assembled,*loaded};
+		result.push_back(*array);
+    }
+    return result;
+}
+
 
 std::vector<std::array<std::string, 4>> VMEngine::getInstr(int segment, int address,int size)
 {   
@@ -1593,21 +1629,41 @@ void Menu::showInstr()
     {
         if (vm.isInitialized())
         {
-            debug.set(vm.getInstr(vm.getCS(),vm.getEIP(),debug.getHeight()-3));
-            debug.setmark(vm.getLine());
-            debug.setmultimark(vm.getBreapoints());
-            if (Ds_000.isChecked())
-                mem.set(vm.getRam(vm.getDS(), 0x000000000, mem.getHeight(),mem.getWidth()));
-            else if (Ds_esi.isChecked())
-                mem.set(vm.getRam(vm.getDS(), vm.getESI(), mem.getHeight(),mem.getWidth()));
-            else if (Es_edi.isChecked())
-                mem.set(vm.getRam(vm.getES(), vm.getEDI(), mem.getHeight(),mem.getWidth()));
-            else if (Cs_eip.isChecked())
-                mem.set(vm.getRam(vm.getCS(), vm.getEIP(), mem.getHeight(),mem.getWidth()));
-            else if (Ss_esp.isChecked())
-                mem.set(vm.getRam(vm.getSS(), vm.getESP(), mem.getHeight(),mem.getWidth()));
-            else if (Ss_FFF.isChecked())
-                mem.set(vm.getRam(vm.getSS(), 0x0000FF20, mem.getHeight(),mem.getWidth()));  
+            try
+            {
+                debug.set(vm.getInstr(vm.getCS(),vm.getEIP(),debug.getHeight()-3));
+                debug.setmark(vm.getLine());
+                debug.setmultimark(vm.getBreapoints());
+                regs.set(vm.getRegs());
+                flags.set(vm.getFlags());
+                stack.set(vm.getStack());
+                if (Ds_000.isChecked())
+                    mem.set(vm.getRam(vm.getDS(), 0x000000000, mem.getHeight(),mem.getWidth()));
+                else if (Ds_esi.isChecked())
+                    mem.set(vm.getRam(vm.getDS(), vm.getESI(), mem.getHeight(),mem.getWidth()));
+                else if (Es_edi.isChecked())
+                    mem.set(vm.getRam(vm.getES(), vm.getEDI(), mem.getHeight(),mem.getWidth()));
+                else if (Cs_eip.isChecked())
+                    mem.set(vm.getRam(vm.getCS(), vm.getEIP(), mem.getHeight(),mem.getWidth()));
+                else if (Ss_esp.isChecked())
+                    mem.set(vm.getRam(vm.getSS(), vm.getESP(), mem.getHeight(),mem.getWidth()));
+                else if (Ss_FFF.isChecked())
+                    mem.set(vm.getRam(vm.getSS(), 0x0000FF20, mem.getHeight(),mem.getWidth()));
+             }
+             catch(exception const& e)
+            {
+                tolog(e.what());
+                vm.Halt();
+                vm.Unconfigure();
+            }
+        }
+        else
+        {
+            regs.set("En attente d'initialisation...");
+            flags.set("Attente...");
+            stack.set("Attente...");
+            mem.set("En attente d'initialisation...");
+            screen.set("En attente d'initialisation...");        
         }
     }
     catch(exception const& e)
@@ -1619,29 +1675,6 @@ void Menu::showInstr()
 
 void Menu::refresh()
 {
-  if (!vm.isInitialized())
-  {
-    regs.set("En attente d'initialisation...");
-    flags.set("Attente...");
-    stack.set("Attente...");
-    mem.set("En attente d'initialisation...");
-    screen.set("En attente d'initialisation...");
-  }
-  else
-  {
-      try
-    {
-        regs.set(vm.getRegs());
-        flags.set(vm.getFlags());
-        stack.set(vm.getStack());
-    }
-    catch(exception const& e)
-    {
-        tolog(e.what());
-        vm.Halt();
-        vm.Unconfigure();
-    }
-  }
   if (!vm.isExecuted())
   {
     finalcut::FApplication::setDarkTheme();
@@ -1650,10 +1683,9 @@ void Menu::refresh()
   {
     finalcut::FApplication::setDefaultTheme();
   }
-  auto root_widget = getRootWidget();
+  /*auto root_widget = getRootWidget();
   root_widget->resetColors();
-  root_widget->redraw();
-
+  root_widget->redraw();*/
 }
 
 void Menu::exec()

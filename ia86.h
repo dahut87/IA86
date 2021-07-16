@@ -132,6 +132,7 @@ struct Code
 {
         uint32_t address;
         size_t size;
+        std::string name;
         uint8_t *content;
         bool assembled;
         bool loaded;
@@ -314,6 +315,7 @@ class VMEngine
     std::string getRegs();
     std::string getStack();
     std::vector<std::array<std::string, 4>>  getInstr(int segment, int address,int size);
+    std::vector<std::array<std::string, 7>> getCode();
     void SetMem(Code *code);
     void SetRegs(State *init);
     std::string getRam(int segment, int address,int lines, int linesize);

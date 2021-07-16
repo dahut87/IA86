@@ -1,10 +1,10 @@
-CC=g++ -O2
-LFLAGS=-lfinal -lkeystone -lstdc++ -lm -lcapstone -lunicorn -lz
+CC=g++ -O2 -static
+LFLAGS=-lfinal -lkeystone -lstdc++ -lm -lcapstone -lunicorn -lz -lncursesw
 OPTIONS=-std=c++17
 DOCKER=docker run --name maker --rm -v $$(pwd):/data maker
 START=./start.sh 
 
-all: dockerfile files copy run
+all: dockerfile files run
 
 clean: dockerclean
 
@@ -37,32 +37,3 @@ stop:
 delete:
 	rm -rf ./ia86
 
-copy:	libcapstone.so.4 libunicorn.so.1 libfinal.so.0.7.2 libkeystone.so.0 libc.musl-x86_64.so.1 libstdc++.so.6.0.28 libz.so.1.2.11 libgcc_s.so.1
-
-libcapstone.so.4:
-	${DOCKER} cp /usr/lib/libcapstone.so.4 /data/libcapstone.so.4
-
-libunicorn.so.1:
-	${DOCKER} cp /usr/lib/libunicorn.so.1 /data/libunicorn.so.1
-
-libfinal.so.0.7.2:
-	${DOCKER} cp /usr/lib/libfinal.so.0.7.2 /data/libfinal.so.0.7.2
-	ln -s ./libfinal.so.0.7.2 ./libfinal.so.0 
-
-libkeystone.so.0:
-	${DOCKER} cp /usr/lib64/libkeystone.so.0 /data/libkeystone.so.0 
-
-libc.musl-x86_64.so.1:
-	${DOCKER} cp /lib/libc.musl-x86_64.so.1 /data/libc.musl-x86_64.so.1
-
-libz.so.1.2.11:
-	${DOCKER} cp /lib/libz.so.1.2.11 /data/libz.so.1.2.11
-	ln -s ./libz.so.1.2.11 ./libz.so.1
-
-libstdc++.so.6.0.28:	
-	${DOCKER} cp /usr/lib/libstdc++.so.6.0.28 /data/libstdc++.so.6.0.28
-	ln -s ./libstdc++.so.6.0.28 ./libstdc++.so.6
-
-libgcc_s.so.1:
-	${DOCKER} cp /usr/lib/libgcc_s.so.1 /data/libgcc_s.so.1
-	
