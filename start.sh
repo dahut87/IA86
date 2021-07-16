@@ -5,7 +5,7 @@ KITTY=$(kitty -v|grep created)
 if [ "${KITTY}" != "" ]; then
 	echo "Kitty installé"
 	if [ ${X} -ge 1920 ]; then
-		kitty --start-as fullscreen bash -c "docker run -it -e COLUMNS=213 -e LINES=58 --name maker --rm -v $(pwd):/data maker ./ia86"
+		kitty --start-as fullscreen ./ia86
 		exit
 	fi
 fi
@@ -22,4 +22,4 @@ elif [ ${X} -ge 1280 ]; then
 else
 	SIZE=6
 fi
-xterm -fullscreen -fa monaco -fs ${SIZE} -bg black -fg green -e bash -c "docker run -it -e COLUMNS=213 -e LINES=58 --name maker --rm -v $(pwd):/data maker ./ia86"
+xterm -fullscreen -fa monaco -fs ${SIZE} -bg black -fg green -e ./ia86

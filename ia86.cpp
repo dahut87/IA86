@@ -853,9 +853,9 @@ std::vector<int> VMEngine::getBreapoints()
         int line=0;
         for(std::array<std::string, 4> item: items)
         {
-            if (item[0]==intToHexString(bp[1],8))// && getCS()==bp[0])
+            if (item[0]==intToHexString(bp[1],8) && getCS()==bp[0])
             {
-                ((Menu*)widget)->tolog(to_string(line));
+                //((Menu*)widget)->tolog(to_string(line));
                 list.push_back(line);
                 break;
             }
@@ -889,15 +889,20 @@ static void hook_code (uc_engine *uc, uint64_t address, uint32_t size, void *use
         throw Error("VM IA86 - hook instructions.......................[ERREUR]");
     //((Menu *)user_data)->tolog(intToHexString(code[0],2));
     //((Menu *)user_data)->tolog(intToHexString(code[1],2));
+    bool breakp=false;
+    for(std::array<uint32_t,2> bp: breakpoints)
+        if (address==bp[0]*16+bp[1])
+        {
+            breakp=true;
+            break;
+        }
+    if (!breakp && (!step || (hadcall>0 && !call))) return;
     if (code[0]==0xF4)      
         executed=false;
     else if (step && (code[0]==0xE8 || code[0]==0xFF || code[0]==0x9A || (code[0]==0x66 && (code[1]==0xE8 || code[1]==0xFF || code[1]==0x9A))))
         hadcall=address+size;
-    bool breakp=false;
-    for(std::array<uint32_t,2> bp: breakpoints)
-        if (address==bp[0]*16+bp[1])
-            breakp=true;
-    if ((!step && !breakp) || (hadcall>0 && !call && !breakp)) return;
+    else
+        hadcall=0;    
     uc_emu_stop(uc);
 }
 
@@ -1578,6 +1583,7 @@ void Menu::loadLevel(int alevel)
   debug.clear();
   vm.setRights(level.rights);
   AdjustWindows();
+  showInstr();
 }
 
 void Menu::end()
@@ -1683,9 +1689,9 @@ void Menu::refresh()
   {
     finalcut::FApplication::setDefaultTheme();
   }
-  /*auto root_widget = getRootWidget();
+  auto root_widget = getRootWidget();
   root_widget->resetColors();
-  root_widget->redraw();*/
+  root_widget->redraw();
 }
 
 void Menu::exec()
