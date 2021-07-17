@@ -187,6 +187,32 @@ class ScenarioWindow final : public finalcut::FDialog
     finalcut::FListView listview{this};
 };
 
+class CodeWindow final : public finalcut::FDialog
+{
+  public:
+    // Constructor
+    explicit CodeWindow (finalcut::FWidget* = nullptr);
+    // Disable copy constructor
+    CodeWindow (const CodeWindow&) = delete;
+    // Destructor
+    ~CodeWindow() override = default;
+    // Disable copy assignment operator (=)
+    CodeWindow& operator = (const CodeWindow&) = delete;
+    // Method
+    std::vector<std::array<std::string, 7>> get();
+    void set(std::vector<std::array<std::string, 7>> src);
+    void clear();
+    int getindex();
+    int getsize();
+  private:
+    // Method
+    std::vector<std::array<std::string, 7>> content;
+    void initLayout() override;
+    void adjustSize() override;
+    // Data members
+    finalcut::FListView listview{this};
+};
+
 class InstructionWindow final : public finalcut::FDialog
 {
   public:
@@ -390,6 +416,8 @@ class Menu final : public finalcut::FDialog
     void ClearScreen();
     void AdjustWindows();
     void initWindows();
+    void openscenar();
+    void closescenar();
     void initLayout() override;
     // Event handler
     void onClose (finalcut::FCloseEvent*) override;
@@ -400,8 +428,30 @@ class Menu final : public finalcut::FDialog
     finalcut::FMenuBar       Menubar{this};
     finalcut::FMenu          Game{"&Partie", &Menubar};
     finalcut::FMenuItem      New{"&Nouvelle partie", &Game};
+    finalcut::FMenuItem      Open{"&Ouvrir une partie", &Game};
+    finalcut::FMenuItem      Save{"&Sauver la partie", &Game};
+    finalcut::FMenuItem      Close{"&Fermer une partie", &Game};
     finalcut::FMenuItem      Line2{&Game};
+    finalcut::FMenuItem      OpenScenar{"&Ouvrir un scénario", &Game};
+    finalcut::FMenuItem      CloseScenar{"&Fermer un scénario", &Game};    
+    finalcut::FMenuItem      Line3{&Game};
     finalcut::FMenuItem      Quit{"&Quitter", &Game};
+    finalcut::FMenu          Views{"&vues", &Menubar};
+    finalcut::FRadioMenuItem Rearange1{"&Scénarios", &Views};
+    finalcut::FRadioMenuItem Rearange3{"&Objectifs", &Views};
+    finalcut::FRadioMenuItem Rearange{"&Deboguage", &Views};
+    finalcut::FRadioMenuItem Rearange2{"&Données", &Views};    
+    finalcut::FMenu          Tools{"&Outils", &Menubar};
+    finalcut::FMenuItem      Assemble{"&Assembler", &Tools};
+    finalcut::FMenu          Debug{"&Exécution", &Menubar};
+    finalcut::FMenuItem      Run{"&Exécuter", &Debug};
+    finalcut::FMenuItem      End{"&Terminer", &Debug};
+    finalcut::FMenuItem      TraceInto{"Pas à pas &détaillé", &Debug}; 
+    finalcut::FMenuItem      StepOver{"&Pas à pas", &Debug};
+    finalcut::FMenu          Breakpoint{"&Point d'arrêt", &Menubar};
+    finalcut::FMenuItem      AddBp{"&Ajouter", &Breakpoint};
+    finalcut::FMenuItem      ClearBp{"&Supprimer", &Breakpoint};
+    finalcut::FMenuItem      ClearAllBp{"&Tout supprimer", &Breakpoint};
     finalcut::FMenu          Options{"&Options", &Menubar};
     finalcut::FMenu          Memory{"&Visualisateur Mémoire", &Options};
     finalcut::FRadioMenuItem Ds_000{"DS:0000", &Memory};
@@ -414,17 +464,6 @@ class Menu final : public finalcut::FDialog
     finalcut::FMenu          Code{"&Syntaxe", &Options};
     finalcut::FCheckMenuItem AsmAtt{"Assembleur AT&T", &Code};
     finalcut::FCheckMenuItem UnasmAtt{"Désassembleur AT&T", &Code};
-    finalcut::FMenu          Tools{"&Outils", &Menubar};
-    finalcut::FMenuItem      Assemble{"&Assembler", &Tools};
-    finalcut::FMenuItem      Rearange{"&Ordonne les fenêtres", &Tools};
-    finalcut::FMenu          Debug{"&Déboguage", &Menubar};
-    finalcut::FMenuItem      Run{"&Exécuter", &Debug};
-    finalcut::FMenuItem      End{"&Terminer", &Debug};
-    finalcut::FMenuItem      TraceInto{"Pas à pas &détaillé", &Debug}; 
-    finalcut::FMenuItem      StepOver{"&Pas à pas", &Debug};
-    finalcut::FMenu          Breakpoint{"&Point d'arrêt", &Menubar};
-    finalcut::FMenuItem      AddBp{"&Ajouter", &Breakpoint};
-    finalcut::FMenuItem      ClearBp{"&Tout supprimer", &Breakpoint};
     finalcut::FDialogListMenu Window{"&Fenêtres", &Menubar};
     finalcut::FMenu          Help{"&Aide", &Menubar}; 
     finalcut::FMenuItem      About{"&A propos", &Help}; 
@@ -433,6 +472,7 @@ class Menu final : public finalcut::FDialog
     TextWindow               info{this};
     TextWindow               view{this};
     InstructionWindow        debug{this};
+    CodeWindow               codes{this};
     TextWindow               regs{this};
     TextWindow               flags{this};
     TextWindow               stack{this};

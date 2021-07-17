@@ -3,7 +3,7 @@ X=$(xrandr --current | grep '*' | uniq | awk '{print $1}' | cut -d 'x' -f1)
 Y=$(xrandr --current | grep '*' | uniq | awk '{print $1}' | cut -d 'x' -f2)
 KITTY=$(kitty -v|grep created)
 if [ "${KITTY}" != "" ]; then
-	echo "Kitty installé"
+	echo "Utilisation de Kitty..."
 	if [ ${X} -ge 1920 ]; then
 		kitty --start-as fullscreen ./ia86 $1
 		exit
@@ -22,4 +22,5 @@ elif [ ${X} -ge 1280 ]; then
 else
 	SIZE=6
 fi
+echo "Utilisation de xTerm..."
 xterm -fullscreen -fa monaco -fs ${SIZE} -bg black -fg green -e "sleep 0.4;./ia86 $1"

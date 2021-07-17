@@ -8,6 +8,7 @@
         "niveau_tutoriel" : "Ceci vous...",
         "niveau_code" : "mov ax,0x545
 inc dx
+.title test
 mov esi,0x44440234
 syscall
 mov ax,0x9000
@@ -23,6 +24,7 @@ jnz go
 hlt
 jmp 0x14D
 .org 0x8D
+.title next
 mov es,ax
 .org 0x14D
 mov es,ax

@@ -107,6 +107,7 @@ void ScenarioWindow::click()
 void ScenarioWindow::Load(std::vector<Level> levels)
 {
     vector<std::string> items;
+    listview.clear();
     for(size_t i=0; i < levels.size(); i++)
     {
         //((Menu*)this->getParent())->tolog(".");
@@ -204,6 +205,72 @@ void InstructionWindow::initLayout()
 }
 
 void InstructionWindow::adjustSize()
+{
+  finalcut::FDialog::adjustSize();
+  listview.setGeometry (FPoint{1, 2}, FSize(getWidth(), getHeight() - 1));
+}
+
+//----------------------------------------------------------------------
+// Classe CodeWindow
+//----------------------------------------------------------------------
+
+CodeWindow::CodeWindow (finalcut::FWidget* parent)
+  : finalcut::FDialog{parent}
+{
+
+  listview.ignorePadding();
+  listview.addColumn ("Num");
+  listview.addColumn ("Titre");
+  listview.addColumn ("Adresse");
+  listview.addColumn ("Taille");
+  listview.addColumn ("Source");
+  listview.addColumn ("Assemblé");
+  listview.addColumn ("Chargé");
+  listview.hideSortIndicator(true);
+  listview.setFocus();
+}
+
+std::vector<std::array<std::string, 7>> CodeWindow::get()
+{
+    return content;
+}
+
+void CodeWindow::clear()
+{
+  listview.clear();
+  listview.redraw();
+}
+
+int CodeWindow::getindex()
+{
+  return listview.getindex();
+}
+
+int CodeWindow::getsize()
+{
+  return listview.getCount();
+}
+
+void CodeWindow::set(std::vector<std::array<std::string, 7>> src)
+{
+  content=src;
+  listview.clear();
+  for (const auto& place : content)
+  {
+    const finalcut::FStringList line (place.begin(), place.end());
+    listview.insert (line);
+  }
+  listview.redraw();
+}
+
+void CodeWindow::initLayout()
+{
+  listview.setGeometry (FPoint{1, 2}, FSize{getWidth(), getHeight() - 1});
+  setMinimumSize (FSize{51, 6});
+  FDialog::initLayout();
+}
+
+void CodeWindow::adjustSize()
 {
   finalcut::FDialog::adjustSize();
   listview.setGeometry (FPoint{1, 2}, FSize(getWidth(), getHeight() - 1));
@@ -412,7 +479,6 @@ std::vector<Code> Assembler::MultiAssemble(std::string source,uint32_t address)
         Code *code=new Code;
         bool begin=true;
         int org=address;
-        std::string name="/";
         code->address=org;
         while (std::getline(stream, line)) 
         {
@@ -428,8 +494,6 @@ std::vector<Code> Assembler::MultiAssemble(std::string source,uint32_t address)
                     mcode.push_back(*code);
                     code=new Code;
                     code->address=org;
-                    code->name=name;
-                    name="/";
                 }
             }    
             else if (line.find(".title") != std::string::npos)
@@ -437,7 +501,7 @@ std::vector<Code> Assembler::MultiAssemble(std::string source,uint32_t address)
                 std::smatch match;
                 if(std::regex_search(line, match, regex_name))
                 {
-                    name=match.str(1);
+                    code->name=match.str(1);
                 }
             }
             else
@@ -703,7 +767,7 @@ void VMEngine::Close()
 
 void VMEngine::Halt()
 {
-    if (executed)
+    if (executed && debugnow)
         widget->tolog("VM IA86 - arret...................................[ INFO ]");
    executed=false;
 }
@@ -1211,8 +1275,8 @@ void VMEngine::Run(bool astep, bool acall, uint64_t timeout)
                 throw Error("VM IA86 - execution...............................[ERREUR]");
             else
             {
-                if (!executed)
-                widget->tolog("VM IA86 - execution...............................[ INFO ]");
+                if (!executed && debugnow)
+                    widget->tolog("VM IA86 - execution...............................[ INFO ]");
                 executed="true";
             }
         }
@@ -1286,7 +1350,8 @@ void Menu::initWindows()
 
 void Menu::AdjustWindows()
 {
-  //this->setGeometry ( FPoint { 63, 45 }, FSize{60, 11} );
+  this->setGeometry ( FPoint { 63, 45 }, FSize{60, 11} );
+  codes.setGeometry ( FPoint { 63, 45 }, FSize{60, 11} );
   edit.setGeometry ( FPoint { 01, 17 }, FSize{39, 27} );
   view.setGeometry ( FPoint { 01, 45 }, FSize{60, 11} );
   regs.setGeometry ( FPoint { 01, 01 }, FSize{40, 15} );
@@ -1298,7 +1363,7 @@ void Menu::AdjustWindows()
   debug.setGeometry ( FPoint { 42, 17 }, FSize{60, 27} );
   scenar.setGeometry ( FPoint { 187, 01 }, FSize{25, 55} );
   info.setGeometry (FPoint { 55, 25 }, FSize{50, 14});
-  //this->show();
+  this->show();
   info.hide();
   flags.hide();
   stack.hide();
@@ -1306,6 +1371,7 @@ void Menu::AdjustWindows()
   screen.hide();
   if (scenario.loaded)
   {
+      codes.show();
       info.show();
       edit.show();
       view.show();
@@ -1321,11 +1387,18 @@ void Menu::AdjustWindows()
             mem.show();
       if (level.rights > 6)
             screen.show();
-      /*Options.setEnable();
-      Tools.setEnable();
-      Window.setEnable();
-      Debug.setEnable();
-      Breakpoint.setEnable(); */
+      New.setEnable();
+      Open.setEnable();
+      Save.setEnable();
+      Close.setEnable();
+      Assemble.setEnable();
+      Run.setEnable();
+      End.setEnable();
+      TraceInto.setEnable();
+      StepOver.setEnable();
+      AddBp.setEnable();
+      ClearBp.setEnable();
+      ClearAllBp.setEnable();
   }
   else
   {
@@ -1335,11 +1408,18 @@ void Menu::AdjustWindows()
       tuto.hide();
       debug.hide();
       scenar.hide();
-      /*Options.setDisable();
-      Tools.setDisable();
-      Window.setDisable();
-      Debug.setDisable();
-      Breakpoint.setDisable();  */
+      New.setDisable();
+      Open.setDisable();
+      Save.setDisable();
+      Close.setDisable();
+      Assemble.setDisable();
+      Run.setDisable();
+      End.setDisable();
+      TraceInto.setDisable();
+      StepOver.setDisable();
+      AddBp.setDisable();
+      ClearBp.setDisable();
+      ClearAllBp.setDisable();
   }
 }
 
@@ -1352,6 +1432,7 @@ void Menu::initMenus()
   Window.setStatusbarMessage ("Fenêtres en cours d'exécution");
   Help.setStatusbarMessage ("Aide et informations IA86");
   Line2.setSeparator();
+  Line3.setSeparator();
   New.addAccelerator (FKey::Meta_n);
   New.setStatusbarMessage ("Debuter une nouvelle partie"); 
   Quit.addAccelerator (FKey::Meta_x);
@@ -1407,6 +1488,12 @@ void Menu::initMenusCallBack()
     finalcut::getFApplication(),
     &finalcut::FApplication::cb_exitApp,
     this
+  );
+  About.addCallback
+  (
+    "clicked",
+    this,
+    &Menu::about
   );
   Assemble.addCallback
   (
@@ -1498,6 +1585,18 @@ void Menu::initMenusCallBack()
     this,
     &Menu::showInstr
   );
+  OpenScenar.addCallback
+  (
+    "clicked",
+    this,
+    &Menu::openscenar
+  );
+  CloseScenar.addCallback
+  (
+    "clicked",
+    this,
+    &Menu::closescenar
+  );
 }
 
 void Menu::initMisc()
@@ -1558,6 +1657,7 @@ void Menu::loadScenario(std::string file)
    strStream << inFile.rdbuf();
    std::string json=strStream.str();
    std::istringstream json_data(json);
+   scenario.levels.clear();
    struct_mapping::map_json_to_struct(scenario, json_data);
    if (scenario.levels.size()>0) 
    {
@@ -1605,6 +1705,7 @@ void Menu::end()
 void Menu::compile()
 {
     vm.Configure(&level.init,edit.get());
+    codes.set(vm.getCode());
     ClearScreen();
     showInstr();
 }
@@ -1613,6 +1714,24 @@ void Menu::tolog(std::string str)
 {
     this->Log.append(str);
     this->Log.scrollBy (0, 10);
+}
+
+void Menu::openscenar()
+{
+  finalcut::FString file{};
+  file = finalcut::FFileDialog::fileOpenChooser (this);
+  if ( file.isEmpty() )
+    return;
+  else
+    loadScenario(file.c_str());
+}
+
+void Menu::closescenar()
+{
+    scenario.loaded=false;
+
+    level.title="";
+    closeLevel();
 }
 
 void Menu::about()
@@ -1629,9 +1748,9 @@ void Menu::about()
   debug.hide();
   scenar.hide();
   info.show();
-  info.redraw();
-  //((finalcut::FApplication*)this->getParent())->sendQueuedEvents();
-  sleep(3);
+  finalcut::FFocusEvent event (finalcut::Event::ChildFocusIn);
+  ((finalcut::FApplication*)this->getParent())->queueEvent(&info, &event);
+  usleep(5000000);
   AdjustWindows();
 }
 
